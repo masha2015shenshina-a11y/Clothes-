@@ -1,3 +1,4 @@
+import {ContourView} from './contour';
 import * as T from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
@@ -58,8 +59,10 @@ export class CompositionWorkspace {
     private sequence = 0;
     selected = 0;
     part: Part = 'root';
-    mode: 'translate' | 'rotate' = 'translate';
+    mode: 'translate' | 'rotate' | null = null;
     paused = false;
+    contour=false;
+    private contourView?:ContourView;
     wind = 0;
     private raf = 0;
     private last = 0;
@@ -94,7 +97,7 @@ export class CompositionWorkspace {
         ellipsoids: NonNullable<SimParams['ellipsoids']>;
         boxes: NonNullable<SimParams['boxes']>;
     } = { capsules: [], ellipsoids: [], boxes: [] };
-    constructor(private host: HTMLElement, private changed: (items: ItemInfo[], id: number, part: Part) => void, private fps: (n: number) => void) {
+    constructor(private host: HTMLElement, private changed: (items: ItemInfo[], id: number, part: Part, mode: 'translate'|'rotate'|null) => void, private fps: (n: number) => void) {
         this.renderer = new T.WebGLRenderer({ antialias: true, alpha: false });
         this.renderer.setPixelRatio(Math.min(1.5, devicePixelRatio));
         this.renderer.setClearColor('#edeae3');
@@ -134,7 +137,7 @@ export class CompositionWorkspace {
         this.invalidate();
         window.dispatchEvent(new Event('cloth-ready'));
     }
-    private emit() { this.changed(this.items.map(({ id, name, kind, ...item }) => ({ id, name, kind, ...(kind === 'cloth' ? { drapeMode: (item as ClothItem).sim.params.drapeMode??'normal', material: (item as ClothItem).material, color: (item as ClothItem).color } : kind==='box'||kind==='sphere'?{dimensions:[...(item as SolidItem).dimensions] as [number,number,number]}:{}) })), this.selected, this.part); }
+    private emit() { this.changed(this.items.map(({ id, name, kind, ...item }) => ({ id, name, kind, ...(kind === 'cloth' ? { drapeMode: (item as ClothItem).sim.params.drapeMode??'normal', material: (item as ClothItem).material, color: (item as ClothItem).color } : kind==='box'||kind==='sphere'?{dimensions:[...(item as SolidItem).dimensions] as [number,number,number]}:{}) })), this.selected, this.part, this.mode); }
     private params(material: MaterialId): SimParams { return { ...MATERIALS[material], stretch: 0, gravity: 9.81, windX: .3, windZ: 1, windStrength: this.wind, selfCollision: true, ...this.colliders, sphere: off, box: off }; }
     async addCloth(preset: PresetId, material: MaterialId, color: string, sheet:SheetSettings=DEFAULT_SHEET, pin:PinMode='two', drapeMode:'normal'|'exaggerated'='normal') {
         if (this.items.filter(i => i.kind === 'cloth').length >= 6)
@@ -259,10 +262,10 @@ export class CompositionWorkspace {
                 Object.assign(i.sim.params, this.colliders);
     }
     select(id: number, part: Part = 'root') { this.selected = id; this.part = part; this.attach(); this.emit(); this.invalidate(); }
-    setMode(mode: 'translate' | 'rotate') { this.mode = mode; this.attach(); this.invalidate(); }
+    setMode(mode: 'translate' | 'rotate' | null) { this.mode = mode;if(mode===null){this.dragging=false;this.gizmo.dragging=false;this.orbit.enabled=true;} this.accumulator=0;this.last=0;this.attach();this.emit();this.invalidate(); }
     private attach() {
         const item = this.items.find(i => i.id === this.selected);
-        if (!item) {
+        if (!item || this.mode===null) {
             this.gizmo.detach();
             return;
         }
@@ -424,11 +427,11 @@ export class CompositionWorkspace {
         pos.setXYZ(j, i.sim.x[o], i.sim.x[o + 1], i.sim.x[o + 2]);
         normal.setXYZ(j, i.sim.nrm[o], i.sim.nrm[o + 1], i.sim.nrm[o + 2]);
     } pos.needsUpdate = normal.needsUpdate = true; }
-    private pointerDown = (e: PointerEvent) => { this.down = [e.clientX, e.clientY]; };
-    private pointerUp = (e: PointerEvent) => { if (this.dragging || this.gizmo.axis || Math.hypot(e.clientX - this.down[0], e.clientY - this.down[1]) > 4)
+    private pointerDown = (e: PointerEvent) => { this.down = [e.clientX, e.clientY];if(e.button===2){this.setMode(null);e.preventDefault();} };
+    private pointerUp = (e: PointerEvent) => { if (e.button!==0 || this.dragging || this.gizmo.axis || Math.hypot(e.clientX - this.down[0], e.clientY - this.down[1]) > 4)
         return; const r = this.renderer.domElement.getBoundingClientRect(); this.pointer.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); this.ray.setFromCamera(this.pointer, this.camera); const meshes = this.items.flatMap(i => i.kind === 'body' ? i.meshes : [i.mesh]); for (const m of meshes)
         m.geometry.computeBoundingSphere(); const hit = this.ray.intersectObjects(meshes, false)[0]; if (hit)
-        this.select(hit.object.userData.item, hit.object.userData.part ?? 'root'); };
+        this.select(hit.object.userData.item, hit.object.userData.part ?? 'root'); else this.setMode(null); };
     private resize() { this.renderer.setSize(Math.max(1, this.host.clientWidth), Math.max(1, this.host.clientHeight)); this.camera.aspect = Math.max(1, this.host.clientWidth) / Math.max(1, this.host.clientHeight); this.camera.updateProjectionMatrix(); this.invalidate(); }
     invalidate = () => { this.dirty = true; if (!this.raf && !this.disposed && !document.hidden)
         this.raf = requestAnimationFrame(this.tick); };
@@ -441,7 +444,7 @@ export class CompositionWorkspace {
         const start = performance.now(), dt = 1 / this.pacer.fps, elapsed = this.last ? Math.min(.1, (time - this.last) / 1000) : dt;
         this.last = time;
         let step = false;
-        if (!this.paused && !this.dragging && this.items.some(i => i.kind === 'cloth')) {
+        if (!this.paused && this.mode===null && !this.dragging && this.items.some(i => i.kind === 'cloth')) {
             this.accumulator += elapsed;
             if (this.accumulator >= dt) {
                 this.accumulator = Math.min(dt * .5, this.accumulator - dt);
@@ -461,7 +464,7 @@ export class CompositionWorkspace {
         else
             this.accumulator = 0;
         if (this.dirty) {
-            this.renderer.render(this.scene, this.camera);
+            if(this.contour)(this.contourView??=new ContourView()).render(this.renderer,this.scene,this.camera);else this.renderer.render(this.scene,this.camera);
             this.dirty = false;
             this.frameCount++;
         }
@@ -472,12 +475,12 @@ export class CompositionWorkspace {
             this.frameCount = 0;
             this.fpsTime = time;
         }
-        if (!this.paused && this.items.some(i => i.kind === 'cloth') || this.dragging)
+        if (!this.paused && this.mode===null && this.items.some(i => i.kind === 'cloth') || this.dragging)
             this.raf = requestAnimationFrame(this.tick);
     };
     dispose() { this.disposed = true; cancelAnimationFrame(this.raf); this.worker.terminate(); for (const j of this.jobs.values())
         j.reject(new Error('Стол закрыт')); this.jobs.clear(); for (const t of this.jobTimeouts.values())
-        clearTimeout(t); this.jobTimeouts.clear(); this.ro.disconnect(); document.removeEventListener('visibilitychange', this.visibility); this.renderer.domElement.removeEventListener('pointerdown', this.pointerDown); this.renderer.domElement.removeEventListener('pointerup', this.pointerUp); this.gizmo.dispose(); this.orbit.dispose(); this.scene.traverse(o => { if (o instanceof T.Mesh || o instanceof T.LineSegments) {
+        clearTimeout(t); this.jobTimeouts.clear(); this.ro.disconnect(); document.removeEventListener('visibilitychange', this.visibility); this.renderer.domElement.removeEventListener('pointerdown', this.pointerDown); this.renderer.domElement.removeEventListener('pointerup', this.pointerUp); this.contourView?.dispose();this.gizmo.dispose(); this.orbit.dispose(); this.scene.traverse(o => { if (o instanceof T.Mesh || o instanceof T.LineSegments) {
         o.geometry.dispose();
         for (const m of Array.isArray(o.material) ? o.material : [o.material])
             m.dispose();

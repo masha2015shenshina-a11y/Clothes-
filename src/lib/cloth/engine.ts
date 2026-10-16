@@ -1,3 +1,4 @@
+import {ContourView} from './contour';
 import {updateSoloSleeve,followSoloSleeve} from './soloSleeve';
 import { t as translate } from '../i18n';
 import {RotationTool} from './rotationTool';
@@ -37,6 +38,7 @@ export interface EngineSettings {
   material: MaterialId;
   color: string;
   wireframe: boolean;
+  contour?: boolean;
   sphere: ColliderState;
   box: ColliderState;
   paused: boolean;
@@ -506,9 +508,11 @@ export class ClothEngine {
   }
   change(patch: Partial<EngineSettings>) {this.applySettings({...this.settings,...patch});this.onChange(patch);}
 
+  private contourView?:ContourView;
   rotationTool?:RotationTool;
   clothDetached=false;
-  setRotationMode(on:boolean){this.rotationTool??=new RotationTool(this);this.rotationTool.setEnabled(on);}
+  onTransformMode?: (mode:boolean|null)=>void;
+  setRotationMode(on:boolean|null){this.rotationTool??=new RotationTool(this);this.rotationTool.setEnabled(on);this.acc=0;this.last=0;this.onTransformMode?.(on);this.invalidate();}
   detachClothFromBody(){if(!this.sim||this.clothDetached)return;this.clothDetached=true;this.sim.sleeveSupport=undefined;if(this.sim.waist)this.sim.waist.enabled=false;this.sim.upperGuides=this.sim.legGuides=this.sim.upperSectors=this.sim.legSectors=null;}
   maskGuides(){
     const sim=this.sim,b=this.build;if(!sim||!b||this.clothDetached)return;
@@ -580,7 +584,7 @@ export class ClothEngine {
   }
 
   load(build: ClothBuild, sourcePose?:{legs:LegsSettings;body:BodySettings}) {
-    this.clothDetached=false;this.rotationTool?.setEnabled(false);
+    this.clothDetached=false;this.setRotationMode(null);
     this.editRevision++;
     this.sim?.endGrab();
     this.controls.enabled = true;
@@ -612,7 +616,7 @@ export class ClothEngine {
     this.acc = 0;
     this.rebuildPinGroups();
     this.syncGeometry();
-    this.rotationTool?.setEnabled(false);
+    this.setRotationMode(null);
   }
 
   refreshPinText(){this.pinLabels.forEach((el,i)=>{el.title=translate(`ОПОРА ${i+1} · ДВОЙНОЕ НАЖАТИЕ: УДАЛИТЬ`);el.setAttribute("aria-label",translate(`Опора ${i+1}`));});}
@@ -664,7 +668,7 @@ export class ClothEngine {
     const stepDt=1/this.pacer.fps;
     const fd=this.last?Math.min(now-this.last,.1):stepDt;this.last=now;
     let stepped=false;
-    if(!this.settings.paused&&this.sim){
+    if(!this.settings.paused&&!this.rotationTool?.control.object&&this.sim){
       this.acc+=fd;
       // No catch-up burst: keep the UI responsive when a device misses its budget.
       if(this.acc+1e-6>=stepDt){this.advance(stepDt);stepped=true;this.acc=Math.max(0,Math.min(this.acc-stepDt,stepDt*.5));}
@@ -682,18 +686,19 @@ export class ClothEngine {
       if(this.slowFrames>=30&&this.pixelRatio>.75){this.pixelRatio=Math.max(.75,this.pixelRatio-.25);this.renderer.setPixelRatio(this.pixelRatio);this.slowFrames=0;this.invalidate();}
     }
     if(now-this.fpsT>=1){this.onFps(this.fpsT?this.frames/(now-this.fpsT):0);this.frames=0;this.fpsT=now;}
-    if((!this.settings.paused||this.renderDirty)&&!this.raf)this.raf=requestAnimationFrame(this.loop);
+    if(((!this.settings.paused&&!this.rotationTool?.control.object)||this.renderDirty)&&!this.raf)this.raf=requestAnimationFrame(this.loop);
     else if(this.settings.paused&&!this.renderDirty&&this.raf){cancelAnimationFrame(this.raf);this.raf=0;}
   };
   lastHealthCheck=0;
 
   advance(dt=DT) {
+    if(this.rotationTool?.control.object)return;
     // Bound motion of the kinematic elbow so the sleeve can follow its collider.
     const d=this.settings.sleeve.angle-this.armAngle;
     if(this.settings.armEnabled&&Math.abs(d)>.00001){const before=this.armAngle;this.armAngle+=Math.max(-90*dt,Math.min(90*dt,d));if(this.sim&&!this.clothDetached)followSoloSleeve(this.sim,this.settings.sleeve,before,this.armAngle);this.updateArm();}
     if(this.settings.legsEnabled&&(["left","right"] as const).some(side=>(["hip","knee","spread"] as const).some(key=>Math.abs(this.settings.legs[side][key]-this.legPose[side][key])>1e-5))){const before=structuredClone(this.legPose);let changed=false;for(const side of ["left","right"] as const)for(const key of ["hip","knee","spread"] as const){const delta=this.settings.legs[side][key]-this.legPose[side][key];if(Math.abs(delta)>1e-5){this.legPose[side][key]+=Math.max(-90*dt,Math.min(90*dt,delta));changed=true;}}if(changed){if(this.sim&&this.build&&!this.clothDetached)followLegPose(this.sim,this.build,before,this.legPose);this.updateLegs();}}
     if(this.settings.body.on&&((["torsoPitch","torsoLean","headPitch","headLean"] as const).some(key=>Math.abs(this.settings.body[key]-this.bodyPose[key])>1e-5)||(["left","right"] as const).some(side=>(["raise","forward","elbow"] as const).some(key=>Math.abs(this.settings.body[side][key]-this.bodyPose[side][key])>1e-5)))){const before=structuredClone(this.bodyPose);let changed=false;for(const key of ["torsoPitch","torsoLean","headPitch","headLean"] as const){const delta=this.settings.body[key]-this.bodyPose[key];if(Math.abs(delta)>1e-5){this.bodyPose[key]+=Math.max(-60*dt,Math.min(60*dt,delta));changed=true;}}for(const side of ["left","right"] as const)for(const key of ["raise","forward","elbow"] as const){const delta=this.settings.body[side][key]-this.bodyPose[side][key];if(Math.abs(delta)>1e-5){this.bodyPose[side][key]+=Math.max(-90*dt,Math.min(90*dt,delta));changed=true;}}if(changed){if(this.sim&&this.build&&!this.clothDetached)followUpperPose(this.sim,this.build,this.settings.legs,before,this.bodyPose);this.updateBody();}}
-    if(this.rotationTool?.dragging)return;
+    if(this.rotationTool?.control.object)return;
     this.sim?.step(dt);this.geometryDirty=true;this.invalidate();
   }
   stepOnce() { this.advance(); this.editRevision++; }
@@ -707,7 +712,7 @@ export class ClothEngine {
     this.controls.update();
   }
   snapshot() {
-    this.renderer.render(this.scene, this.camera);
+    if(this.settings.contour)(this.contourView??=new ContourView()).render(this.renderer,this.scene,this.camera);else if(this.settings.contour)(this.contourView??=new ContourView()).render(this.renderer,this.scene,this.camera);else this.renderer.render(this.scene,this.camera);
     const url = this.renderer.domElement.toDataURL("image/png");
     const a = document.createElement("a");
     a.href = url;
@@ -748,7 +753,7 @@ export class ClothEngine {
   renderFrame() {
     // Rendering refreshes camera.matrixWorldInverse before projecting the overlay.
     // Both WebGL and labels now use exactly the same camera for this frame.
-    this.renderer.render(this.scene,this.camera);
+    if(this.settings.contour)(this.contourView??=new ContourView()).render(this.renderer,this.scene,this.camera);else this.renderer.render(this.scene,this.camera);
     this.updatePinLabels();
     if(this.firstFrame){this.firstFrame=false;window.dispatchEvent(new Event("cloth-ready"));}
   }
@@ -785,7 +790,10 @@ export class ClothEngine {
   }
 
   private onDown = (e:PointerEvent) => this.pointerDown(e);
+  private transformPress: {x:number;y:number}|null=null;
   pointerDown(e:PointerEvent) {
+    if(e.button===2&&this.rotationTool?.control.object){this.setRotationMode(null);e.preventDefault();return;}
+    if(e.button===0&&this.rotationTool?.control.object&&!this.rotationTool.control.axis){this.transformPress={x:e.clientX,y:e.clientY};return;}
     if(this.rotationTool?.control.object&&this.rotationTool.control.axis)return;
     if(e.button!==0 || e.shiftKey || e.ctrlKey || e.metaKey || !this.sim || this.dragId!==null)return;
     this.setNdc(e);
@@ -901,6 +909,7 @@ export class ClothEngine {
 
   private onUp = (e:PointerEvent) => this.pointerUp(e);
   pointerUp(e:PointerEvent) {
+    if(this.transformPress){const p=this.transformPress;this.transformPress=null;if(Math.hypot(e.clientX-p.x,e.clientY-p.y)<4)this.setRotationMode(null);return;}
     if(this.dragId!==e.pointerId)return;
     if(this.pinPress&&!this.pinPress.moved&&e.timeStamp-this.pinPress.time<300)this.lastPinTap={id:this.pinPress.id,time:e.timeStamp,x:e.clientX,y:e.clientY};else this.lastPinTap.id=-1;this.pinPress=null;
     this.dragId=null;this.objectDrag=null;this.pinDrag=null;this.controls.enabled=true;this.sim?.endGrab();
@@ -929,7 +938,7 @@ export class ClothEngine {
     el.removeEventListener("pointercancel", this.onUp);
     el.removeEventListener("lostpointercapture", this.onUp);
     el.removeEventListener("contextmenu", this.prevent);
-    this.rotationTool?.dispose();this.rotationTool=undefined;
+    this.contourView?.dispose();this.rotationTool?.dispose();this.rotationTool=undefined;
     this.controls.dispose();
     const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>(),textures=new Set<THREE.Texture>(this.textures.values());
     this.scene.traverse(object=>{const o=object as THREE.Mesh; if(o.geometry)geometries.add(o.geometry);if(o.material)for(const m of Array.isArray(o.material)?o.material:[o.material])materials.add(m);});

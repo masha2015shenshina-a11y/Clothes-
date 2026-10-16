@@ -67,12 +67,16 @@ export class BoxContacts {
             if (!hit)
                 continue;
             max = Math.max(max, this.depth);
-            const d = Math.min(.025, this.depth + 1e-5);
+            // Relax corrections toward each vertex penetration. Keep a coherent
+            // face displacement so corner contacts do not introduce torque.
+            const radius=this.hx*Math.abs(this.nx)+this.hy*Math.abs(this.ny)+this.hz*Math.abs(this.nz);
             for (let j = 0; j < 3; j++) {
                 const o = j === 0 ? a : j === 1 ? b : c;
                 if (!w[o / 3])
                     continue;
                 const basis=B.basis,nx=this.nx,ny=this.ny,nz=this.nz;
+                const penetration=radius-(v[j*3]*nx+v[j*3+1]*ny+v[j*3+2]*nz);
+                const d=Math.min(.025,this.depth+1e-5)*(Math.abs(ny)>.999?.9+.1*Math.max(0,Math.min(1,penetration/(this.depth+1e-5))):1);
                 const dx=(basis?nx*basis[0]+ny*basis[3]+nz*basis[6]:nx)*d,dy=(basis?nx*basis[1]+ny*basis[4]+nz*basis[7]:ny)*d,dz=(basis?nx*basis[2]+ny*basis[5]+nz*basis[8]:nz)*d;
                 x[o] += dx;
                 x[o + 1] += dy;

@@ -1,4 +1,6 @@
 export const EN: Record<string, string> = Object.fromEntries(`
+2D-контур|2D outline
+Готово|Done
 Обычный|Normal
 Утрированный|Exaggerated
 Драпировка|Draping

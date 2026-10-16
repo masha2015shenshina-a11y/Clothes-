@@ -5,7 +5,7 @@ import type { ClothEngine } from './engine';
 export class RotationTool {
     readonly control: TransformControls;
     readonly proxy = new T.Object3D();
-    enabled = false;
+    enabled: boolean | null = null;
     dragging = false;
     private last = new T.Matrix4();
     private attached = '';
@@ -23,12 +23,12 @@ export class RotationTool {
         this.control.addEventListener('objectChange', () => this.changed());
         this.control.addEventListener('change', () => e.invalidate());
     }
-    setEnabled(on: boolean) { this.enabled = on; this.attached = ''; this.sync(); }
+    setEnabled(on: boolean | null) { this.enabled = on;if(on===null){this.dragging=false;this.control.dragging=false;this.engine.controls.enabled=true;} this.attached = ''; this.sync(); }
     sync() {
         if (this.dragging)
             return;
         const e = this.engine, k = e.settings.selected;
-        if (!['cloth','sphere','box'].includes(k)||(k==='cloth'&&!e.sim)) {
+        if (this.enabled === null || !['cloth','sphere','box'].includes(k)||(k==='cloth'&&!e.sim)) {
             this.control.detach();
             this.attached = '';
             return;

@@ -104,7 +104,7 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
   useEffect(()=>{document.documentElement.dataset.theme=theme;try{localStorage.setItem("cloth-theme",theme);}catch{}},[theme]);
   const [showMannequin,setShowMannequin]=useState(true);
   const [parts,setParts]=useState<BodyParts>({...DEFAULT_PARTS});
-  const [rotateMode,setRotateMode]=useState(false);
+  const [rotateMode,setRotateMode]=useState<boolean|null>(null);
   const [quality,setQuality]=useState(.8);
   const [meshCount,setMeshCount]=useState(0);
   const [sheet,setSheet]=useState<SheetSettings>({...DEFAULT_SHEET});
@@ -131,6 +131,7 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
   const [gravity, setGravity] = useState(9.81);
   const [drapeMode,setDrapeMode]=useState<'normal'|'exaggerated'>('normal');
   const [stiffness, setStiffness] = useState(1);
+  const [contour,setContour]=useState(false);
   const [wireframe, setWireframe] = useState(false);
   const [paused, setPaused] = useState(false);
   const [sphere, setSphere] = useState<ColliderState>(PRESETS.find(p=>p.id==="two")!.sphere);
@@ -149,8 +150,8 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
   const mannequin=preset==="skirt"||preset==="pants"||preset==="body";
   const def = PRESETS.find((p) => p.id === preset)!;
   const settings: EngineSettings = useMemo(
-    () => ({ drapeMode,parts,mannequin:mannequin&&showMannequin,body:{...body,on:body.on&&mannequin},windEnabled,skirt,legs,legsEnabled:mannequin&&legs.on&&showMannequin, windHeight, theme, diffuse, directional, gravity, wind, windAngle, stiffness, material, color, wireframe, sphere, box, paused:paused||!active, windElevation, selfCollision, sleeve, selected, dragPlane, armEnabled:preset==="sleeve" }),
-    [drapeMode,parts,active,body,mannequin,showMannequin,windEnabled,skirt,legs,wind,windHeight, theme, diffuse, directional, gravity, windAngle, stiffness, material, color, wireframe, sphere, box, paused, windElevation, selfCollision, sleeve, selected, dragPlane, preset],
+    () => ({ contour,drapeMode,parts,mannequin:mannequin&&showMannequin,body:{...body,on:body.on&&mannequin},windEnabled,skirt,legs,legsEnabled:mannequin&&legs.on&&showMannequin, windHeight, theme, diffuse, directional, gravity, wind, windAngle, stiffness, material, color, wireframe, sphere, box, paused:paused||!active, windElevation, selfCollision, sleeve, selected, dragPlane, armEnabled:preset==="sleeve" }),
+    [contour,drapeMode,parts,active,body,mannequin,showMannequin,windEnabled,skirt,legs,wind,windHeight, theme, diffuse, directional, gravity, windAngle, stiffness, material, color, wireframe, sphere, box, paused, windElevation, selfCollision, sleeve, selected, dragPlane, preset],
   );
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -188,7 +189,7 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
     setPreset(v.preset);setPin(v.pin);setReleased(v.released);setMaterial(s.material);setColor(s.color);
     setWindEnabled(s.windEnabled);setWindHeight(s.windHeight);setWind(s.wind);setWindAngle(s.windAngle);setWindElevation(s.windElevation);setGravity(s.gravity);setStiffness(s.stiffness);setDrapeMode(s.drapeMode??'normal');
     setSelfCollision(s.selfCollision);setSleeve({...s.sleeve});setSphere({...s.sphere});setBox({...s.box});
-    setWireframe(s.wireframe);setPaused(s.paused);setSelected(s.selected);setDragPlane(s.dragPlane);
+    setContour(s.contour??false);setWireframe(s.wireframe);setPaused(s.paused);setSelected(s.selected);setDragPlane(s.dragPlane);
     setDiffuse({...s.diffuse});setDirectional({...s.directional});setResetTick(t=>t+1);
   };
   const undo=()=>{commit();const entry=past.current.pop();if(!entry)return;future.current.push(entry);restore(entry.before);setHistoryCount([past.current.length,future.current.length]);};
@@ -261,7 +262,7 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
   }, [sheet.width,sheet.length,quality,preset, pin, resetTick, glError, sleeve.length, sleeve.ease, skirt.length,skirt.width,skirt.style,skirt.folds,legs.length,legs.ease,body.on,body.sleeves,body.arms,body.tunic,body.length,body.ease,body.cape,body.capeLength,body.hood]);
 
   const choosePreset = (id: PresetId) => {
-    setRotateMode(false);engineRef.current?.setRotationMode(false);
+    setRotateMode(null);engineRef.current?.setRotationMode(null);
     const p = PRESETS.find((x) => x.id === id)!;
     setPreset(id);if(id==="body")setBody(b=>({...b,on:true}));
     setSelected(id==="sleeve"?"arm":"cloth");
@@ -272,7 +273,7 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
   };
 
   const resetAll = () => {
-    setParts({...DEFAULT_PARTS});setRotateMode(false);engineRef.current?.setRotationMode(false);
+    setParts({...DEFAULT_PARTS});setRotateMode(null);engineRef.current?.setRotationMode(null);
     const standard = PRESETS.find(p => p.id === "two")!;
     setBody(structuredClone(DEFAULT_BODY));setTheme("light");setSkirt({...DEFAULT_SKIRT});setLegs(structuredClone(DEFAULT_LEGS));
     setSheet({...DEFAULT_SHEET});setPreset("two"); setPin("two"); setMaterial("cotton");
@@ -294,7 +295,7 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
   const visibleParts=Object.fromEntries(Object.keys(parts).map(k=>[k,mannequin&&showMannequin&&parts[k as BodyPart]&&(k.includes('Leg')?legs.on:k==='pelvis'?true:k.includes('Arm')?body.on&&body.arms:body.on)])) as BodyParts;
   const setBodyParts=(next:BodyParts)=>{setParts(next);setShowMannequin(true);setLegs(l=>({...l,on:true}));setBody(b=>({...b,on:true,arms:true}));if(!mannequin)choosePreset('body');};
   const togglePart=(part:BodyPart)=>setBodyParts({...visibleParts,[part]:!visibleParts[part]});
-  useEffect(()=>{engineRef.current?.setRotationMode(rotateMode);},[rotateMode,selected]);
+  useEffect(()=>{if(engineRef.current){engineRef.current.onTransformMode=setRotateMode;engineRef.current.setRotationMode(rotateMode);}},[rotateMode,selected]);
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground" onPointerDownCapture={begin} onPointerUpCapture={end} onPointerCancelCapture={end} onInputCapture={e=>{if(!pending.current)begin(e);if(!activePointer.current)end();}} onKeyDownCapture={e=>{if(!e.ctrlKey&&!e.metaKey)begin(e);}} onKeyUpCapture={end}>
       <header className="flex h-11 shrink-0 items-center justify-between border-b border-border px-4">
@@ -331,7 +332,8 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
             ))}
             <div className="absolute left-3 top-3 flex max-w-[calc(100%-24px)] flex-wrap gap-1 bg-card/95 p-1">
               {tr(([{id:"cloth",label:"Ткань"},{id:"pins",label:"Крепления"},{id:"sphere",label:"Шар"},{id:"box",label:"Куб"},{id:"wind",label:"Ветер"},{id:"diffuse",label:"Рассеянный свет"},{id:"directional",label:"Направленный свет"},...(mannequin?[{id:"legs",label:"Таз"}]:[]),...(preset==="sleeve"?[{id:"shoulder",label:"Плечо"},{id:"arm",label:"Локоть"}]:[])] as {id:Selection;label:string}[]).map(o=><button key={o.id} className={`lab-btn ${["diffuse","directional","legs"].includes(o.id)?"icon-btn":""}`} title={tr(o.label.toUpperCase())} aria-label={tr(o.label)} data-selected={selected===o.id} onClick={()=>{setSelected(o.id);if(o.id==="sphere")setSphere({...sphere,on:true});if(o.id==="box")setBox({...box,on:true});}}>{tr(["diffuse","directional","legs"].includes(o.id)?<Icon name={o.id==="legs"?"pelvis":o.id}/>:o.label)}</button>))}
-              {['cloth','box'].includes(selected)&&<div className="flex gap-1"><button className="lab-btn" data-selected={!rotateMode} aria-pressed={!rotateMode} onClick={()=>setRotateMode(false)}>{tr('Перемещение')}</button><button className="lab-btn" data-selected={rotateMode} aria-pressed={rotateMode} onClick={()=>setRotateMode(true)}>{tr('Поворот')}</button></div>}
+              <button className="lab-btn" data-selected={contour} aria-pressed={contour} onClick={()=>setContour(v=>!v)}>{tr('2D-контур')}</button>
+              {['cloth','box','sphere'].includes(selected)&&<div className="flex gap-1"><button className="lab-btn" data-selected={rotateMode===false} aria-pressed={rotateMode===false} onClick={()=>setRotateMode(false)}>{tr('Перемещение')}</button>{selected!=='sphere'&&<button className="lab-btn" data-selected={rotateMode===true} aria-pressed={rotateMode===true} onClick={()=>setRotateMode(true)}>{tr('Поворот')}</button>}{rotateMode!==null&&<button className="lab-btn" onClick={()=>setRotateMode(null)}>{tr('Готово')}</button>}</div>}
 
               {tr((preset==="skirt"||preset==="pants")&&<LimbButtons kind="Leg" side={legSide} linked={legs.linked} onSelect={selectLeg}/>)}
               <button className="lab-btn icon-btn" title={tr("ЧАСТИ МАНЕКЕНА")} aria-label={tr("Части манекена")} data-selected={panelTab==="pose"} onClick={()=>{setPanelOpen(true);setPanelTab("pose");}}><Icon name="body"/></button>
@@ -464,6 +466,7 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
             </div>
             <div className="flex items-center justify-between text-[12.5px]">
               <span className="text-foreground/80">{tr("Каркас")}</span>
+              <Toggle checked={contour} onChange={setContour} label="2D-контур" />
               <Toggle checked={wireframe} onChange={setWireframe} label="Каркас" />
             </div>
           </Section>
