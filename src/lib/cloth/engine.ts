@@ -1,3 +1,4 @@
+import {updateSoloSleeve,followSoloSleeve} from './soloSleeve';
 import { t as translate } from '../i18n';
 import {RotationTool} from './rotationTool';
 import type {BodyParts,BodyPart} from '../../components/BodyMap';
@@ -478,7 +479,7 @@ export class ClothEngine {
     for(let i=0;i<2;i++) {const a=pts[i],b=pts[i+1],m=this.armSegments[i];m.position.copy(a).add(b).multiplyScalar(.5);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),b.clone().sub(a).normalize());}
     const direction=pts[2].clone().sub(pts[1]).normalize();this.soloHand.position.copy(pts[2]).addScaledVector(direction,.13);this.soloHand.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction);
     this.shoulder.position.copy(pts[0]);this.elbow.position.copy(pts[1]);this.wrist.position.copy(pts[2]);this.armGroup.visible=this.settings.armEnabled;
-    if(this.sim)this.sim.params.capsules=this.allCapsules();
+    if(this.sim){this.sim.params.capsules=this.allCapsules();if(!this.clothDetached)updateSoloSleeve(this.sim,{...this.settings.sleeve,angle:this.armAngle});}
   }
   pointWind(direction:THREE.Vector3) {
     const d=direction.clone().normalize();
@@ -594,6 +595,7 @@ export class ClothEngine {
 
     updateLegGuides(this.sim,build,this.legPose,this.settings.legsEnabled);
     updateUpperGuides(this.sim,build,this.settings.legs,this.bodyPose);
+    if(this.settings.armEnabled)updateSoloSleeve(this.sim,{...this.settings.sleeve,angle:this.armAngle});
     {const r=this.settings.legs;this.sim.waist?.setPose(r.x,r.y,r.z,this.settings.body.on?this.bodyPose.torsoPitch:0,this.settings.body.on?this.bodyPose.torsoLean:0);}
     if (this.mesh) { this.scene.remove(this.mesh); this.geom?.dispose(); }
     const g = new THREE.BufferGeometry();
@@ -687,7 +689,7 @@ export class ClothEngine {
   advance(dt=DT) {
     // Bound motion of the kinematic elbow so the sleeve can follow its collider.
     const d=this.settings.sleeve.angle-this.armAngle;
-    if(this.settings.armEnabled&&Math.abs(d)>.00001){this.armAngle+=Math.max(-90*dt,Math.min(90*dt,d));this.updateArm();}
+    if(this.settings.armEnabled&&Math.abs(d)>.00001){const before=this.armAngle;this.armAngle+=Math.max(-90*dt,Math.min(90*dt,d));if(this.sim&&!this.clothDetached)followSoloSleeve(this.sim,this.settings.sleeve,before,this.armAngle);this.updateArm();}
     if(this.settings.legsEnabled&&(["left","right"] as const).some(side=>(["hip","knee","spread"] as const).some(key=>Math.abs(this.settings.legs[side][key]-this.legPose[side][key])>1e-5))){const before=structuredClone(this.legPose);let changed=false;for(const side of ["left","right"] as const)for(const key of ["hip","knee","spread"] as const){const delta=this.settings.legs[side][key]-this.legPose[side][key];if(Math.abs(delta)>1e-5){this.legPose[side][key]+=Math.max(-90*dt,Math.min(90*dt,delta));changed=true;}}if(changed){if(this.sim&&this.build&&!this.clothDetached)followLegPose(this.sim,this.build,before,this.legPose);this.updateLegs();}}
     if(this.settings.body.on&&((["torsoPitch","torsoLean","headPitch","headLean"] as const).some(key=>Math.abs(this.settings.body[key]-this.bodyPose[key])>1e-5)||(["left","right"] as const).some(side=>(["raise","forward","elbow"] as const).some(key=>Math.abs(this.settings.body[side][key]-this.bodyPose[side][key])>1e-5)))){const before=structuredClone(this.bodyPose);let changed=false;for(const key of ["torsoPitch","torsoLean","headPitch","headLean"] as const){const delta=this.settings.body[key]-this.bodyPose[key];if(Math.abs(delta)>1e-5){this.bodyPose[key]+=Math.max(-60*dt,Math.min(60*dt,delta));changed=true;}}for(const side of ["left","right"] as const)for(const key of ["raise","forward","elbow"] as const){const delta=this.settings.body[side][key]-this.bodyPose[side][key];if(Math.abs(delta)>1e-5){this.bodyPose[side][key]+=Math.max(-90*dt,Math.min(90*dt,delta));changed=true;}}if(changed){if(this.sim&&this.build&&!this.clothDetached)followUpperPose(this.sim,this.build,this.settings.legs,before,this.bodyPose);this.updateBody();}}
     if(this.rotationTool?.dragging)return;

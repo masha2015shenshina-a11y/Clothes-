@@ -117,9 +117,9 @@ export class ClothSim {
   step(dt: number) {
     const h = dt / this.substeps;
     if(this.sleeveSupport&&this.params.shoulder){
-      const {count,radius}=this.sleeveSupport,P=this.params;
+      const {count,radius,offset}=this.sleeveSupport,P=this.params;
       const shift=Math.min(.025,Math.max(0,P.windStrength-8)*.002);
-      for(let i=0;i<count;i++){if(this.w[i])continue;const a=i/count*Math.PI*2,q=armTransform([-.85,1.65+radius*Math.cos(a),radius*Math.sin(a)],P.shoulder!);const o=i*3;
+      for(let i=0;i<count;i++){if(this.w[i])continue;const a=i/count*Math.PI*2,q=armTransform([-.85,1.65+offset+radius*Math.cos(a),radius*Math.sin(a)],P.shoulder!);const o=i*3;
         this.x[o]=this.p[o]=q[0]+shift*P.windX;this.x[o+1]=this.p[o+1]=q[1]+shift*(P.windY??0);this.x[o+2]=this.p[o+2]=q[2]+shift*P.windZ;
       }
     }

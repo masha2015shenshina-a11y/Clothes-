@@ -1,4 +1,4 @@
-import {jointRows} from './jointMesh';
+import {jointRows,limbRing} from './jointMesh';
 import {addUpperGarments,DEFAULT_BODY,type BodySettings} from "./mannequin";
 export type PinMode = "two" | "one" | "top" | "none";
 export type PresetId =
@@ -91,7 +91,7 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
 
 export interface WaistBuild {kind:'pants'|'skirt';indices:Uint32Array;reference:Float32Array;origin:V3;}
 export interface ClothBuild {
-  sleeveSupport?: {count:number;radius:number};
+  sleeveSupport?: {count:number;radius:number;offset:number;distances:number[]};
   waist?: WaistBuild;
   upper?: {start:number;capeStart:number;hoodStart:number;sleevesStart:number;sleeveCols:number;sleeveDistances:number[];reference:Float32Array};
   skirt?: {cols:number;rows:number;length:number;width:number;style:string;folds:number};
@@ -125,7 +125,7 @@ export class Builder {
   resolution(n:number,multiple=1){return Math.max(multiple*2,Math.round(n*this.density/multiple)*multiple);}
   upper?: ClothBuild["upper"];
   skirt?: ClothBuild["skirt"];
-  sleeveSupport?: {count:number;radius:number};
+  sleeveSupport?: {count:number;radius:number;offset:number;distances:number[]};
   waist?: WaistBuild;
   seam: number[] = [];
   pos: number[] = [];
@@ -351,21 +351,18 @@ export function buildPreset(id: PresetId, pin: PinMode, sleeve: SleeveSettings =
   switch (id) {
     case "body": break;
     case "sleeve": {
-      const N=b.resolution(36,4), rows=b.resolution(Math.ceil(sleeve.length/.045)+1), radius=ARM_RADIUS+sleeve.ease;
-      const shoulderRadius=ARM_RADIUS+.025;
-      const radiusAt=(j:number)=>{const t=Math.min(1,j/(rows-1)*sleeve.length/.35);return shoulderRadius+(radius-shoulderRadius)*t*t*(3-2*t);};
-      b.sleeveSupport={count:N,radius:shoulderRadius};
+      const N=b.resolution(36,4), distances=jointRows(sleeve.length,b.resolution(Math.ceil(sleeve.length/.045)+1),[[.85,.2]],6), rows=distances.length, radius=Math.max(ARM_RADIUS+.025,ARM_RADIUS+sleeve.ease);
+      const shoulderRadius=radius,offset=ARM_RADIUS+.025-radius;
+      const radiusAt=(_j:number)=>radius;
+      const rings=distances.map(d=>limbRing(armPoints(sleeve.angle,{...DEFAULT_SLEEVE}),d,.85,.85,.16));
+      b.sleeveSupport={count:N,radius:shoulderRadius,offset,distances};
       b.grid({cols:N,rows,wrap:true,
         at:(i,j)=>{
-          const radius=radiusAt(j),d=j/(rows-1)*sleeve.length, a=sleeve.angle*Math.PI/180;
-          const blend=Math.max(0,Math.min(1,(d-.65)/.4));
-          const turn=a*blend*blend*(3-2*blend), phi=i/N*Math.PI*2;
-          const cx=d<=.85?-.85+d:(d-.85)*Math.cos(a);
-          const cy=d<=.85?1.65:1.65+(d-.85)*Math.sin(a);
-          return armTransform([cx-Math.sin(turn)*radius*Math.cos(phi),cy+Math.cos(turn)*radius*Math.cos(phi),radius*Math.sin(phi)],sleeve);
+          const ring=rings[j],phi=i/N*Math.PI*2,shift=offset*Math.max(0,1-distances[j]/.35);
+          return armTransform(ring.center.map((v,k)=>v+ring.radial[k]*(radius*Math.cos(phi)+shift)+ring.normal[k]*radius*Math.sin(phi)),sleeve);
         },
-        restAt:(i,j)=>[-.85+j/(rows-1)*sleeve.length,1.65+radiusAt(j)*Math.cos(i/N*Math.PI*2),radiusAt(j)*Math.sin(i/N*Math.PI*2)],
-        uvAt:(i,j)=>[i/N*2*Math.PI*radius,j/(rows-1)*sleeve.length],pin:(_i,j)=>j===0});
+        restAt:(i,j)=>[-.85+distances[j],1.65+offset*Math.max(0,1-distances[j]/.35)+radiusAt(j)*Math.cos(i/N*Math.PI*2),radiusAt(j)*Math.sin(i/N*Math.PI*2)],
+        uvAt:(i,j)=>[i/N*2*Math.PI*radius,distances[j]],pin:(_i,j)=>j===0});
       break;
     }
     case "two":

@@ -59,6 +59,7 @@ export function followUpperPose(sim: ClothSim, build: ClothBuild, root: LegsSett
 }
 // Loose guides prevent narrow arms from escaping between cape/sleeve triangles.
 export function updateUpperGuides(sim: ClothSim, build: ClothBuild, root: LegsSettings, body: BodySettings) {
+    if(sim.sleeveSupport)return;
     const m = build.upper;
     if (!m || m.sleevesStart<0 || !body.arms) {
         sim.upperGuides = null;

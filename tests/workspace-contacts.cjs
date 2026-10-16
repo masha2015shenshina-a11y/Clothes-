@@ -14,10 +14,10 @@ const far=fixture();far.params.box.x=10;assert.equal(box.solve(far),0);far.param
 const x=Float32Array.from([-.1,1,-.1,.1,1,-.1,0,1,.1,0,1.005,0]),p=x.slice(),w=Float32Array.from([0,0,0,1]);
 const b={pinned:new Uint8Array(4),map:Uint32Array.from([0,1,2,3]),index:Uint32Array.from([0,1,2])};
 const contacts=new GarmentContacts(b,Uint8Array.from([1,1,1,2]));const state={x,p,w,params:{},upperGuides:null};for(let i=0;i<5;i++)contacts.solve(state);assert(x[10]>1.02);assert.deepEqual(x.slice(0,9),b.original??Float32Array.from([-.1,1,-.1,.1,1,-.1,0,1,.1]));assert.deepEqual(x,p);
-// Sleeve opening stays at the shoulder regardless of ease and only shifts in strong wind.
+// Sleeve upper edge stays at the shoulder as its opening grows with ease and only shifts in strong wind.
 for(const ease of [.02,.12,.4]){
- const sleeve={...DEFAULT_SLEEVE,ease,shoulderPitch:25,shoulderYaw:35};const b=buildPreset('sleeve','top',sleeve),s=new ClothSim(b,{...params,shoulder:sleeve});const {count,radius}=b.sleeveSupport;assert.equal(radius,ARM_RADIUS+.025);
- for(const wind of [0,7,20,0]){s.params.windStrength=wind;s.step(1/30);for(let i=0;i<count;i++){const a=i/count*Math.PI*2,target=armTransform([-.85,1.65+radius*Math.cos(a),radius*Math.sin(a)],sleeve),shift=Math.min(.025,Math.max(0,wind-8)*.002);assert(Math.abs(s.x[i*3]-target[0])<1e-6);assert(Math.abs(s.x[i*3+2]-target[2]-shift)<1e-6);}assert(!s.hasNaN());}
+ const sleeve={...DEFAULT_SLEEVE,ease,shoulderPitch:25,shoulderYaw:35};const b=buildPreset('sleeve','top',sleeve),s=new ClothSim(b,{...params,shoulder:sleeve});const {count,radius,offset}=b.sleeveSupport;assert.equal(radius,Math.max(ARM_RADIUS+.025,ARM_RADIUS+ease));
+ for(const wind of [0,7,20,0]){s.params.windStrength=wind;s.step(1/30);for(let i=0;i<count;i++){const a=i/count*Math.PI*2,target=armTransform([-.85,1.65+offset+radius*Math.cos(a),radius*Math.sin(a)],sleeve),shift=Math.min(.025,Math.max(0,wind-8)*.002);assert(Math.abs(s.x[i*3]-target[0])<1e-6);assert(Math.abs(s.x[i*3+2]-target[2]-shift)<1e-6);}assert(!s.hasNaN());}
 }
 console.log('Triangle/cube corner, pinned points, nonuniform boxes, cloth layering, shoulder support and strong-wind threshold passed.');
 // Falling cloth settles on the cube without triangles cutting through its top.
