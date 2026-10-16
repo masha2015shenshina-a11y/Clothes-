@@ -28,7 +28,7 @@ export class RotationTool {
         if (this.dragging)
             return;
         const e = this.engine, k = e.settings.selected;
-        if (!this.enabled || !['cloth', 'sphere', 'box'].includes(k)) {
+        if (k!=='sphere' && (!this.enabled || !['cloth', 'box'].includes(k))) {
             this.control.detach();
             this.attached = '';
             return;
@@ -36,6 +36,7 @@ export class RotationTool {
         if (k === this.attached && k === 'cloth')
             return;
         this.attached = k;
+        this.control.setMode(k==='sphere'?'translate':'rotate');
         this.proxy.rotation.set(0, 0, 0);
         if (k === 'cloth' && e.sim) {
             const bounds = new T.Box3();
@@ -69,7 +70,8 @@ export class RotationTool {
             e.sim.normalsDirty = true;
             e.syncGeometry();
         }
-        else if (k === 'sphere' || k === 'box')
+        else if(k==='sphere')e.change({sphere:{...e.settings.sphere,x:this.proxy.position.x,y:this.proxy.position.y,z:this.proxy.position.z}});
+        else if (k === 'box')
             e.change({ [k]: { ...e.settings[k], rotation: [this.proxy.rotation.x, this.proxy.rotation.y, this.proxy.rotation.z] } });
         e.invalidate();
     }

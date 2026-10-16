@@ -14,6 +14,7 @@ export interface ItemInfo {
     name: string;
     kind: 'cloth' | 'body' | 'box' | 'sphere';
     dimensions?: [number, number, number];
+    drapeMode?: 'normal'|'exaggerated';
     material?: MaterialId;
     color?: string;
 }
@@ -133,9 +134,9 @@ export class CompositionWorkspace {
         this.invalidate();
         window.dispatchEvent(new Event('cloth-ready'));
     }
-    private emit() { this.changed(this.items.map(({ id, name, kind, ...item }) => ({ id, name, kind, ...(kind === 'cloth' ? { material: (item as ClothItem).material, color: (item as ClothItem).color } : kind==='box'||kind==='sphere'?{dimensions:[...(item as SolidItem).dimensions] as [number,number,number]}:{}) })), this.selected, this.part); }
+    private emit() { this.changed(this.items.map(({ id, name, kind, ...item }) => ({ id, name, kind, ...(kind === 'cloth' ? { drapeMode: (item as ClothItem).sim.params.drapeMode??'normal', material: (item as ClothItem).material, color: (item as ClothItem).color } : kind==='box'||kind==='sphere'?{dimensions:[...(item as SolidItem).dimensions] as [number,number,number]}:{}) })), this.selected, this.part); }
     private params(material: MaterialId): SimParams { return { ...MATERIALS[material], stretch: 0, gravity: 9.81, windX: .3, windZ: 1, windStrength: this.wind, selfCollision: true, ...this.colliders, sphere: off, box: off }; }
-    async addCloth(preset: PresetId, material: MaterialId, color: string, sheet:SheetSettings=DEFAULT_SHEET, pin:PinMode='two') {
+    async addCloth(preset: PresetId, material: MaterialId, color: string, sheet:SheetSettings=DEFAULT_SHEET, pin:PinMode='two', drapeMode:'normal'|'exaggerated'='normal') {
         if (this.items.filter(i => i.kind === 'cloth').length >= 6)
             throw new Error('На столе можно разместить до 6 тканей.');
         const id = ++this.jobId;
@@ -150,7 +151,7 @@ export class CompositionWorkspace {
             build.x[o] += offset;
             build.x[o + 2] += offset;
         }
-        const sim = new ClothSim(build, this.params(material)), geometry = new T.BufferGeometry();
+        const sim = new ClothSim(build, {...this.params(material),drapeMode}), geometry = new T.BufferGeometry();
         geometry.setAttribute('position', new T.BufferAttribute(new Float32Array(build.map.length * 3), 3).setUsage(T.DynamicDrawUsage));
         geometry.setAttribute('normal', new T.BufferAttribute(new Float32Array(build.map.length * 3), 3).setUsage(T.DynamicDrawUsage));
         geometry.setIndex(new T.BufferAttribute(build.index, 1));
@@ -273,7 +274,7 @@ export class CompositionWorkspace {
             this.proxy.quaternion.copy(item.anchor.quaternion);
             this.gizmo.setMode(this.mode);
         }
-        else if(item.kind==='box'||item.kind==='sphere'){this.proxy.position.copy(item.mesh.position);this.proxy.quaternion.copy(item.mesh.quaternion);this.gizmo.setMode(this.mode);}
+        else if(item.kind==='box'||item.kind==='sphere'){this.proxy.position.copy(item.mesh.position);this.proxy.quaternion.copy(item.mesh.quaternion);this.gizmo.setMode(item.kind==='sphere'?'translate':this.mode);}
         else if(item.kind==='body') {
             const r = item.root, b = item.body, part = this.part, side: Side = part.startsWith('left') ? 'left' : 'right';
             let position: number[] = [r.x, r.y, r.z];
@@ -367,6 +368,7 @@ export class CompositionWorkspace {
         }
         this.invalidate();
     }
+    setDrapeMode(mode:'normal'|'exaggerated'){const i=this.items.find(i=>i.id===this.selected);if(i?.kind!=='cloth')return;i.sim.params.drapeMode=mode;this.emit();this.invalidate();}
     setMaterial(material: MaterialId, color?: string) { const i = this.items.find(i => i.id === this.selected); if (i?.kind !== 'cloth')
         return; i.material = material; if (color)
         i.color = color; Object.assign(i.sim.params, MATERIALS[material], { stretch: 0 }); i.mesh.material.color.set(i.color); i.mesh.material.roughness = MATERIALS[material].roughness; this.emit(); this.invalidate(); }

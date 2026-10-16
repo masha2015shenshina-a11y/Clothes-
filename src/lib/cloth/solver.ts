@@ -7,6 +7,7 @@ import {capsuleEntry} from './contact';
 import type { ClothBuild } from "./presets";
 
 export interface SimParams {
+  drapeMode?: 'normal'|'exaggerated';
   shoulder?:SleeveSettings;
   gravity: number;
   windX: number;
@@ -48,6 +49,7 @@ export class ClothSim {
   iterations = 2;
   thickness = 0.014;
   time = 0;
+  drapeBlend = 0;
   lastH = 1 / 600;
   grab = -1;
   g = [0, 0, 0];
@@ -123,6 +125,8 @@ export class ClothSim {
     }
     // Preserve velocity when adaptive frame pacing changes the Verlet time step.
     if(Math.abs(h-this.lastH)>1e-10){const ratio=h/this.lastH;for(let i=0;i<this.x.length;i++)this.p[i]=this.x[i]-(this.x[i]-this.p[i])*ratio;this.lastH=h;}
+    const styleTarget=this.params.drapeMode==='exaggerated'?1:0;
+    this.drapeBlend+=(styleTarget-this.drapeBlend)*(1-Math.exp(-dt*3));
     this.computeNormals();
     this.computeForces();
     const target=this.params.capsules??[];
@@ -257,7 +261,8 @@ export class ClothSim {
     const { x, w, cons, rest, ctype } = this;
     const P = this.params;
     const ih2 = 1 / (h * h);
-    const stretch=P.stretch*ih2,shear=P.shear*ih2,bend=P.bend*ih2,seamStretch=Math.min(stretch*.15,2e-8*ih2),seamBend=bend*.35;
+    const style=this.drapeBlend;
+    const stretch=(P.stretch+style*1e-8)*ih2,shear=P.shear*(1+style)*ih2,bend=P.bend*(1-.65*style)*ih2,seamStretch=Math.min(stretch*.15,2e-8*ih2),seamBend=bend*.35;
     for (let k = 0; k < this.m; k++) {
       const a = cons[2 * k], b = cons[2 * k + 1];
       const wa = w[a], wb = w[b];
@@ -267,7 +272,9 @@ export class ClothSim {
       const dx = x[ao] - x[bo], dy = x[ao + 1] - x[bo + 1], dz = x[ao + 2] - x[bo + 2];
       const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (len < 1e-9) continue;
-      const s = -(len - rest[k]) / ((ws + (ctype[k]===0?stretch:ctype[k]===1?shear:ctype[k]===3?seamStretch:ctype[k]===4?seamBend:bend)) * len);
+      // Extra ease creates deeper drapes; seams and fixed anchors retain their size.
+      const ease=ctype[k]>=3?1:1+.18*style*(wa===0||wb===0?.25:1);
+      const s = -(len - rest[k]*ease) / ((ws + (ctype[k]===0?stretch:ctype[k]===1?shear:ctype[k]===3?seamStretch:ctype[k]===4?seamBend:bend)) * len);
       x[ao] += wa * s * dx; x[ao + 1] += wa * s * dy; x[ao + 2] += wa * s * dz;
       x[bo] -= wb * s * dx; x[bo + 1] -= wb * s * dy; x[bo + 2] -= wb * s * dz;
     }

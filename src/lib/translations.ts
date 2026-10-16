@@ -1,4 +1,7 @@
 export const EN: Record<string, string> = Object.fromEntries(`
+Обычный|Normal
+Утрированный|Exaggerated
+Драпировка|Draping
 Подсказки|Help
 Быстрый старт|Quick start
 Закрыть подсказки|Close tips

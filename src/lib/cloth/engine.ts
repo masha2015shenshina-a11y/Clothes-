@@ -31,6 +31,7 @@ export interface EngineSettings {
   selected: Selection;
   dragPlane: "view" | "floor";
   windAngle: number; // degrees
+  drapeMode?: 'normal'|'exaggerated';
   stiffness: number; // 0.2..3
   material: MaterialId;
   color: string;
@@ -401,6 +402,7 @@ export class ClothEngine {
       ellipsoids:this.activeEllipsoids(),
       windZ: Math.cos(a)*Math.cos(s.windElevation*Math.PI/180),
       windStrength: s.windEnabled?s.wind:0,
+      drapeMode:s.drapeMode,
       stretch: 0,
       shear: M.shear / s.stiffness,
       bend: M.bend / (s.stiffness * s.stiffness),
@@ -781,7 +783,7 @@ export class ClothEngine {
 
   private onDown = (e:PointerEvent) => this.pointerDown(e);
   pointerDown(e:PointerEvent) {
-    if(this.rotationTool?.enabled&&this.rotationTool.control.object)return;
+    if(this.rotationTool?.control.object)return;
     if(e.button!==0 || e.shiftKey || e.ctrlKey || e.metaKey || !this.sim || this.dragId!==null)return;
     this.setNdc(e);
     const pg=this.pickPin(e);
