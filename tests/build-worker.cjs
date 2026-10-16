@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');
+const {Worker}=require('node:worker_threads');
+const esbuild=require('esbuild');
+const output=esbuild.buildSync({entryPoints:['src/lib/cloth/build.worker.ts'],bundle:true,write:false,platform:'browser',format:'iife'}).outputFiles[0].text;
+const worker=new Worker(`const {parentPort}=require('node:worker_threads');global.self={postMessage:(v,o)=>parentPort.postMessage(v,o?.transfer)};${output};parentPort.on('message',data=>self.onmessage({data}));`,{eval:true});
+const root=process.argv[2]||'/tmp/cloth-v20-test';
+const {DEFAULT_BODY}=require(root+'/mannequin.js');
+const {DEFAULT_SKIRT,DEFAULT_LEGS,DEFAULT_SLEEVE}=require(root+'/presets.js');
+const timeout=setTimeout(()=>{worker.terminate();throw Error('Mesh worker timed out');},10000);
+let count=0;
+worker.on('message',({id,build,error})=>{assert(!error);assert.equal(id,++count);assert(build.x instanceof Float32Array);assert.equal(build.locked.length,build.pinned.length);assert(build.x.every(Number.isFinite));assert(build.cons.every(i=>i<build.pinned.length));if(count===30){clearTimeout(timeout);worker.terminate();console.log('Background mesh worker: repeated jobs, transferable buffers and shoulder metadata passed.');}});
+for(let id=1;id<=30;id++)worker.postMessage({id,args:['pants','top',DEFAULT_SLEEVE,DEFAULT_SKIRT,DEFAULT_LEGS,{...DEFAULT_BODY,on:true,cape:id%3!==0,sleeves:id%2===0,hood:id===2?'up':'down'}]});

@@ -1,0 +1,7 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';import * as T from '../node_modules/three/build/three.module.js';import {ClothEngine} from '/tmp/cloth-engine-v4.mjs';
+const require=createRequire(import.meta.url);const {ClothSim}=require('/tmp/cloth-v4-test/solver.js');const {buildPreset}=require('/tmp/cloth-v4-test/presets.js');
+const e=Object.create(ClothEngine.prototype);e.sim=new ClothSim(buildPreset('wide','two'),{});e.camera=new T.PerspectiveCamera(42,1,.05,50);e.camera.position.set(0,1,5);e.camera.lookAt(0,1,0);e.camera.updateMatrixWorld();e.controls={target:new T.Vector3(0,1,0),update(){}};e.renderer={domElement:{getBoundingClientRect:()=>({left:0,top:0,width:800,height:800})}};e.armAngle=35;e.editRevision=1;e.updateArm=()=>{};e.syncGeometry=()=>{};e.rebuildPinGroups();assert.equal(e.pinGroups.length,2);
+const center=e.pinCenter(e.pinGroups[0]).project(e.camera);assert.equal(e.pickPin({clientX:(center.x+1)*400+25,clientY:(1-center.y)*400,pointerType:'mouse'}),0);
+const saved=e.captureRuntime();e.sim.x.fill(5);e.sim.baseW.fill(1);e.camera.position.set(10,10,10);e.restoreRuntime(saved);assert.deepEqual(e.sim.x,saved.x);assert.deepEqual(e.sim.baseW,saved.baseW);assert.deepEqual(e.camera.position.toArray(),saved.camera);assert.equal(e.pinGroups.length,2);
+e.sim=new ClothSim(buildPreset('wide','top'),{});e.rebuildPinGroups();assert.equal(e.pinGroups.length,1);assert.equal(e.pinGroups[0].length,60);console.log('Runtime snapshots, large pin hit targets and grouped edge anchors passed.');

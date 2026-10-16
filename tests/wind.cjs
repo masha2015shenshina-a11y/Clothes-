@@ -1,0 +1,5 @@
+const assert=require('node:assert/strict'),{ClothSim}=require('/tmp/cloth-v4-test/solver.js'),{buildPreset,MATERIALS}=require('/tmp/cloth-v4-test/presets.js');
+function sim(wind){return new ClothSim(buildPreset('wide','two'),{gravity:9.81,windX:0,windY:0,windZ:1,windStrength:wind,stretch:0,shear:2e-7,bend:3e-6,damping:.6,density:1,friction:.45,selfCollision:true,sphere:{on:false,r:.5,x:0,y:.5,z:0},box:{on:false,s:1,x:0,y:1,z:0}})}
+const calm=sim(0),breeze=sim(2),strong=sim(10);breeze.computeForces();strong.computeForces();const a=s=>Array.from(s.acc).filter((_,i)=>i%3===2).reduce((a,b)=>a+Math.abs(b),0)/s.n;assert(a(strong)>a(breeze)*5);const forceRatio=a(strong)/a(breeze);
+for(let f=0;f<90;f++){calm.step(1/60);strong.step(1/60);}const displacement=s=>Array.from(s.x).filter((_,i)=>i%3===2).reduce((a,b)=>a+Math.abs(b),0)/s.n;assert(displacement(strong)>displacement(calm)+.25,'wind must produce visible displacement');
+const max=sim(20);max.params.density=MATERIALS.silk.density;for(let f=0;f<90;f++)max.step(1/60);assert(!max.hasNaN());console.log({forceRatio,calm:displacement(calm),strong:displacement(strong),maxWindStable:true});

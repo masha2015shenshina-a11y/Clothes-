@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import * as T from '../node_modules/three/build/three.module.js';
+import {ClothEngine} from '/tmp/cloth-engine-v7.mjs';
+const require=createRequire(import.meta.url);
+const {ClothSim}=require('/tmp/cloth-v7-test/solver.js');
+const {buildPreset,DEFAULT_LEGS,DEFAULT_SLEEVE}=require('/tmp/cloth-v7-test/presets.js');
+const e=Object.create(ClothEngine.prototype);
+e.sim=new ClothSim(buildPreset('pants','top'),{});e.camera=new T.PerspectiveCamera();e.camera.position.set(0,1,5);
+e.controls={target:new T.Vector3(0,1,0),update(){}};e.armAngle=35;e.legPose=structuredClone(DEFAULT_LEGS);e.editRevision=1;
+e.updateArm=()=>{};e.updateLegs=()=>{};e.syncGeometry=()=>{};e.rebuildPinGroups();
+const saved=e.captureRuntime();e.sim.x.fill(5);e.sim.baseW.fill(1);e.legPose.left.knee=100;e.restoreRuntime(saved);
+assert.deepEqual(e.sim.x,saved.x);assert.deepEqual(e.sim.baseW,saved.baseW);assert.equal(e.legPose.left.knee,0);
+e.settings={selected:'box',box:{size:1,width:2,height:.6,depth:.3,y:2},legs:structuredClone(DEFAULT_LEGS),sleeve:{...DEFAULT_SLEEVE}};
+e.change=patch=>{e.settings={...e.settings,...patch};};e.floorSelected();assert.equal(e.settings.box.y,.3);
+e.settings.selected='legs';e.floorSelected();e.legPose=structuredClone(e.settings.legs);assert(Math.abs(Math.min(...e.legCapsules().flatMap(c=>[c.a[1]-c.r,c.b[1]-c.r])))<1e-10);
+e.settings.selected='cloth';e.floorSelected();let min=Infinity;for(let i=0;i<e.sim.n;i++)min=Math.min(min,e.sim.x[i*3+1]);assert(Math.abs(min-.014)<1e-6);
+console.log('Undo runtime with garment mesh and leg pose; floor placement for box, legs and cloth passed.');

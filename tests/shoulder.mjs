@@ -1,0 +1,4 @@
+import assert from 'node:assert/strict';import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);const {armTransform,armPoints,buildPreset,DEFAULT_SLEEVE}=require('/tmp/cloth-v6-test/presets.js');
+for(const pitch of [-70,0,70])for(const yaw of [-150,0,120]){const s={...DEFAULT_SLEEVE,shoulderX:1,shoulderY:2,shoulderZ:-.5,shoulderPitch:pitch,shoulderYaw:yaw};const p=[.2,1.8,.5];const back=armTransform(armTransform(p,s),s,true);back.forEach((v,i)=>assert(Math.abs(v-p[i])<1e-9));const points=armPoints(65,s);assert.deepEqual(points[0],[1,2,-.5]);for(let i=0;i<2;i++)assert(Math.abs(Math.hypot(...points[i].map((v,j)=>v-points[i+1][j]))-.85)<1e-9);const b=buildPreset('sleeve','top',s);assert(b.x.every(Number.isFinite));}
+console.log('Shoulder transforms, inverse wrist coordinates and segment lengths passed.');

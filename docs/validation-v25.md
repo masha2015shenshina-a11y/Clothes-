@@ -1,0 +1,9 @@
+# Rotation, lighting and mannequin controls
+
+Main laboratory: rotation rings for cloth, box and sphere. Cloth transforms both Verlet positions and history; automatic body/shoulder/waist guidance is detached when the cloth is independently rotated, with an explanatory UI note. Reloading cloth restores its fit. Rotation does not move the mannequin. Cuboid visual rotation and both point/triangle collision use the same orientation basis; floor placement accounts for rotated extents.
+
+Composition: whole-mannequin translation/rotation now use the common toolbar. Joint angles remain relative to that object's orientation. Meshes, capsule endpoints and ellipsoid bases receive the same world transform. Added diffuse/directional light enable switches, color, intensity, azimuth and elevation. Lighting changes only update lights and invalidate rendering.
+
+Main controls: seven-part interactive SVG mannequin replaces coarse visibility toggles. Head, torso, pelvis and each limb can be enabled independently; hidden colliders and limb guides are disabled too. Existing ellipsoid indexing is preserved for garment logic. The map supports keyboard activation and labelled pressed states. Body toolbar button opens these controls. Light editing is discoverable in the Scene tab. Cloth reset and whole-scene reset have distinct icons.
+
+Validation: TypeScript, existing workspace control and contact regressions, and new numerical/headless tests passed. New checks cover rotated cube triangle and particle contact, whole-rig collider alignment, independent body-part visibility, light color/intensity/direction, seven keyboard-accessible map targets, and cloth rotation preserving position history. Axis-aligned falling cloth/cube regression still passes. Browser QA unavailable; actual pointer targeting, layout and visual output were not verified in a browser.

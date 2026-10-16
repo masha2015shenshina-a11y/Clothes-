@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict');const root=process.argv[2]||'/tmp/cloth-v2-test';
+const {buildPreset,PRESETS,MATERIALS,armPoints,ARM_RADIUS}=require(root+'/presets.js');const {ClothSim}=require(root+'/solver.js');
+function params(d,material='cotton',angle=35){const m=MATERIALS[material],pts=armPoints(angle);return {gravity:9.81,windX:.2,windY:0,windZ:1,windStrength:2.2,stretch:0,shear:m.shear,bend:m.bend,damping:m.damping,density:m.density,friction:m.friction,selfCollision:true,sphere:{...d.sphere,r:d.sphere.size},box:{...d.box,s:d.box.size},capsules:d.id==='sleeve'?[{a:pts[0],b:pts[1],r:ARM_RADIUS},{a:pts[1],b:pts[2],r:ARM_RADIUS}]:[]};}
+let maxMs=0;
+for(const d of PRESETS){const b=buildPreset(d.id,d.defaultPin),sim=new ClothSim(b,params(d));const t=performance.now();for(let i=0;i<45;i++)sim.step(1/60);const ms=(performance.now()-t)/45;maxMs=Math.max(ms,maxMs);assert(!sim.hasNaN());for(let i=0;i<sim.n;i++){assert(sim.x[i*3+1]>=-.001,d.id+' floor');if(b.pinned[i])for(let j=0;j<3;j++)assert.equal(sim.x[i*3+j],b.x[i*3+j]);}console.log(d.id,sim.n,ms.toFixed(1)+' ms/step');}
+// Separate non-neighbouring layers, including exactly coincident particles.
+const d=PRESETS.find(d=>d.id==='wide');const sim=new ClothSim(buildPreset('wide','none'),params(d));const a=500,b=1500;for(let k=0;k<3;k++)sim.x[b*3+k]=sim.x[a*3+k];sim.selfCollide();const dist=Math.hypot(...[0,1,2].map(k=>sim.x[a*3+k]-sim.x[b*3+k]));assert(dist>.02,'self collision must separate layers');
+// All sleeve sizes retain a closed circumference and finite state through a moving elbow.
+const sd=PRESETS.find(d=>d.id==='sleeve');for(const length of [.5,1.65,2.1])for(const ease of [.04,.35]){const build=buildPreset('sleeve','top',{length,ease,angle:0}),s=new ClothSim(build,params(sd,'silk',0));for(let f=0;f<100;f++){const p=armPoints(f*1.3);s.params.capsules=[{a:p[0],b:p[1],r:ARM_RADIUS},{a:p[1],b:p[2],r:ARM_RADIUS}];s.step(1/60);}assert(!s.hasNaN());assert.equal(build.map[0],build.map[36]);for(let i=0;i<s.n;i++)assert(s.x[i*3+1]>=-.001);}
+console.log(JSON.stringify({passed:true,selfSeparation:dist,maxStepMs:maxMs}));
