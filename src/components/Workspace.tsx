@@ -2,7 +2,7 @@ import { LanguageSwitch } from './LanguageSwitch';
 import { t as tr, useLanguage } from '../lib/i18n';
 import { useEffect, useRef, useState } from 'react';
 import { CompositionWorkspace, DEFAULT_WORKSPACE_LIGHTING, PARTS, type Part, type ItemInfo } from '../lib/cloth/workspace';
-import { MATERIALS, type MaterialId, type PresetId } from '../lib/cloth/presets';
+import { DEFAULT_SHEET, MATERIALS, type MaterialId, type PresetId } from '../lib/cloth/presets';
 export default function Workspace({ active, onLab }: {
     active: boolean;
     onLab: () => void;
@@ -11,6 +11,7 @@ export default function Workspace({ active, onLab }: {
     const host = useRef<HTMLDivElement>(null), engine = useRef<CompositionWorkspace | null>(null), fps = useRef<HTMLSpanElement>(null);
     const [items, setItems] = useState<ItemInfo[]>([]), [selected, setSelected] = useState(0), [part, setPart] = useState<Part>('root');
     const [preset, setPreset] = useState<PresetId>('two'), [material, setMaterial] = useState<MaterialId>('cotton'), [color, setColor] = useState('#c0603d');
+    const [sheet,setSheet]=useState({...DEFAULT_SHEET});
     const [busy, setBusy] = useState(false), [error, setError] = useState(''), [paused, setPaused] = useState(false), [wind, setWind] = useState(false), [mode, setMode] = useState<'translate' | 'rotate'>('translate'), [panel, setPanel] = useState(() => window.innerWidth >= 1024);
     useEffect(() => { if (!host.current)
         return; try {
@@ -30,7 +31,7 @@ export default function Workspace({ active, onLab }: {
     useEffect(()=>{engine.current?.setLighting(lighting);},[lighting]);
     const item = items.find(i => i.id === selected);
     const addCloth = async () => { setBusy(true); setError(''); try {
-        await engine.current?.addCloth(preset, material, color);
+        await engine.current?.addCloth(preset, material, color,sheet);
     }
     catch (e) {
         setError(e instanceof Error ? e.message : 'Не удалось добавить ткань');
@@ -58,7 +59,8 @@ export default function Workspace({ active, onLab }: {
    {tr(panel && <aside className="absolute right-0 inset-y-0 z-20 w-[270px] max-w-[85vw] overflow-y-auto border-l border-border bg-card p-3 lg:static">
     <h2 className="lab-label mb-3">{tr("Добавить на стол")}</h2>
     <div className="space-y-2">
-     <label className="block text-xs">{tr("Форма")}<select aria-label={tr("Форма ткани")} className="workspace-select" value={preset} onChange={e => setPreset(e.target.value as PresetId)}><option value="two">{tr("Полотно")}</option><option value="wide">{tr("Широкое полотно")}</option><option value="narrow">{tr("Узкая ткань")}</option><option value="ribbons">{tr("Ленты")}</option><option value="free">{tr("Свободная ткань")}</option><option value="tube">{tr("Цилиндр")}</option></select></label>
+     <label className="block text-xs">{tr("Форма")}<select aria-label={tr("Форма ткани")} className="workspace-select" value={preset} onChange={e => setPreset(e.target.value as PresetId)}><option value="two">{tr("Полотно")}</option><option value="ribbons">{tr("Ленты")}</option><option value="tube">{tr("Цилиндр")}</option></select></label>
+     {preset==='two'&&<div className="space-y-2">{(['width','length'] as const).map(key=><label className="block text-xs" key={key}>{tr(key==='width'?'Ширина':'Длина')} · {sheet[key].toFixed(2)} {tr('м')}<input className="lab-range" type="range" min=".3" max="4" step=".05" value={sheet[key]} onChange={e=>setSheet({...sheet,[key]:+e.target.value})}/></label>)}</div>}
      <div className="flex gap-2"><select aria-label={tr("Материал новой ткани")} className="workspace-select" value={material} onChange={e => setMaterial(e.target.value as MaterialId)}>{tr(materialOptions)}</select><input aria-label={tr("Цвет новой ткани")} type="color" className="h-8 w-10" value={color} onChange={e => setColor(e.target.value)}/></div>
      <button className="lab-btn w-full" disabled={busy || items.filter(i => i.kind === 'cloth').length >= 6} onClick={addCloth}>{tr("+ Ткань")}</button><button className="lab-btn w-full" disabled={items.filter(i => i.kind === 'body').length >= 3} onClick={addBody}>{tr("+ Отдельный манекен")}</button>
      <div className="flex gap-2"><button className="lab-btn flex-1" onClick={()=>addSolid('box')}>+ {tr('Куб')}</button><button className="lab-btn flex-1" onClick={()=>addSolid('sphere')}>+ {tr('Шар')}</button></div>

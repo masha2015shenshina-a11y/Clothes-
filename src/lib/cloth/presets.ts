@@ -54,14 +54,10 @@ export function armPoints(angle: number,s: SleeveSettings=DEFAULT_SLEEVE) {
 export const PRESETS: PresetDef[] = [
   {id:"body",label:"Туловище",rect:false,defaultPin:"top",sphere:{on:false,x:0,y:.5,z:0,size:.4},box:boxOff},
   {id:"sleeve",label:"Рука с рукавом",rect:false,defaultPin:"top",sphere:{on:false,x:0,y:.5,z:0,size:.4},box:boxOff},
-  { id: "two", label: "За два верхних угла", rect: true, defaultPin: "two", sphere: { on: true, x: 0, y: 0.55, z: 0.55, size: 0.45 }, box: boxOff },
-  { id: "one", label: "За один верхний угол", rect: true, defaultPin: "one", sphere: { on: true, x: 0.3, y: 0.5, z: 0.5, size: 0.45 }, box: boxOff },
-  { id: "wide", label: "Широкая ткань", rect: true, defaultPin: "two", sphere: { on: true, x: 0.25, y: 0.5, z: 0.55, size: 0.48 }, box: boxOff },
-  { id: "narrow", label: "Узкая ткань", rect: true, defaultPin: "two", sphere: { on: true, x: 0, y: 0.45, z: 0.5, size: 0.4 }, box: boxOff },
+  { id: "two", label: "Полотно", rect: true, defaultPin: "two", sphere: { on: true, x: 0, y: 0.55, z: 0.55, size: 0.45 }, box: boxOff },
   { id: "ribbons", label: "Отдельные ленты", rect: true, defaultPin: "top", sphere: { on: true, x: 0, y: 0.5, z: 0.5, size: 0.45 }, box: boxOff },
   { id:"skirt",label:"Юбка",rect:false,defaultPin:"top",sphere:{on:false,x:0,y:.5,z:.9,size:.4},box:boxOff },
   { id:"pants",label:"Брюки",rect:false,defaultPin:"top",sphere:{on:false,x:0,y:.5,z:.9,size:.4},box:boxOff },
-  { id: "free", label: "Свободный прямоугольник", rect: true, defaultPin: "none", sphere: { on: true, x: -0.45, y: 0.5, z: 0, size: 0.5 }, box: { on: true, x: 0.6, y: 0.35, z: 0.15, size: 0.7 } },
   { id: "tube", label: "Тканевый цилиндр", rect: false, defaultPin: "none", sphere: { on: true, x: 0, y: 0.55, z: 0, size: 0.55 }, box: boxOff },
 ];
 
@@ -247,6 +243,7 @@ function rectPin(pin: PinMode, cols: number) {
 
 function hangingRect(b: Builder, w: number, h: number, cols: number, rows: number, pin: PinMode, ox = 0) {
  cols=b.resolution(cols);rows=b.resolution(rows);
+  const top=Math.max(TOP,h+.15);
   const pinch = pin === "two" ? 0.8 : pin === "top" ? 0.92 : 1;
   b.grid({
     cols,
@@ -257,9 +254,9 @@ function hangingRect(b: Builder, w: number, h: number, cols: number, rows: numbe
       const v = j / (rows - 1);
       const x0 = (u - 0.5) * w;
       const z = pinch < 1 ? 0.03 * Math.sin(u * Math.PI * 9) * (0.3 + v) : 0.01 * Math.sin(u * 13 + v * 7);
-      return [ox + x0 * pinch, TOP - v * h, z];
+      return [ox + x0 * pinch, top - v * h, z];
     },
-    restAt: (i, j) => [ox + (i / (cols - 1) - 0.5) * w, TOP - (j / (rows - 1)) * h, 0],
+    restAt: (i, j) => [ox + (i / (cols - 1) - 0.5) * w, top - (j / (rows - 1)) * h, 0],
     uvAt: (i, j) => [(i / (cols - 1)) * w, (1 - j / (rows - 1)) * h],
     pin: rectPin(pin, cols),
   });
@@ -347,7 +344,9 @@ function pants(b:Builder,s:LegsSettings) {
  b.waist={kind:'pants',indices,reference:Float32Array.from(Array.from(indices).flatMap(i=>[b.pos[i*3]-s.x,b.pos[i*3+1]-s.y,b.pos[i*3+2]-s.z])),origin:[s.x,s.y,s.z]};
 }
 
-export function buildPreset(id: PresetId, pin: PinMode, sleeve: SleeveSettings = DEFAULT_SLEEVE, skirtSettings:SkirtSettings=DEFAULT_SKIRT, legs:LegsSettings=DEFAULT_LEGS, body:BodySettings=DEFAULT_BODY,quality=1): ClothBuild {
+export interface SheetSettings { width:number; length:number; }
+export const DEFAULT_SHEET:SheetSettings={width:2,length:2};
+export function buildPreset(id: PresetId, pin: PinMode, sleeve: SleeveSettings = DEFAULT_SLEEVE, skirtSettings:SkirtSettings=DEFAULT_SKIRT, legs:LegsSettings=DEFAULT_LEGS, body:BodySettings=DEFAULT_BODY,quality=1,sheet:SheetSettings=DEFAULT_SHEET): ClothBuild {
   const b = new Builder();b.density=Math.max(.6,Math.min(1,quality));
   switch (id) {
     case "body": break;
@@ -371,7 +370,10 @@ export function buildPreset(id: PresetId, pin: PinMode, sleeve: SleeveSettings =
     }
     case "two":
     case "one":
-      hangingRect(b, 2, 2, 40, 40, pin);
+      {const width=Math.max(.3,Math.min(4,Number.isFinite(sheet.width)?sheet.width:2)),length=Math.max(.3,Math.min(4,Number.isFinite(sheet.length)?sheet.length:2));
+      const cols=Math.ceil(width/.05)+1,rows=Math.ceil(length/.05)+1,scale=Math.min(1,Math.sqrt(2400/(cols*rows)));
+      hangingRect(b,width,length,Math.max(4,Math.floor(cols*scale)),Math.max(4,Math.floor(rows*scale)),pin);}
+
       break;
     case "wide":
       hangingRect(b, 3.2, 2, 60, 38, pin);

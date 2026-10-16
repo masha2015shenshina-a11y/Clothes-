@@ -4,7 +4,7 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { ClothSim, type SimParams } from './solver';
 import { GarmentContacts } from './layers';
 import { FramePacer } from './pacing';
-import { MATERIALS, DEFAULT_LEGS, DEFAULT_SKIRT, DEFAULT_SLEEVE, legPoints, LEG_RADIUS, type MaterialId, type PresetId, type ClothBuild, type LegsSettings } from './presets';
+import { DEFAULT_SHEET, type SheetSettings, type PinMode, MATERIALS, DEFAULT_LEGS, DEFAULT_SKIRT, DEFAULT_SLEEVE, legPoints, LEG_RADIUS, type MaterialId, type PresetId, type ClothBuild, type LegsSettings } from './presets';
 import { DEFAULT_BODY, bodyEllipsoids, bodyArmPoints, upperTransform, type BodySettings, type Side } from './mannequin';
 import { mannequinGeometries, limbGeometry } from './mannequinGeometry';
 export type Part = 'root' | 'torso' | 'head' | 'leftArm' | 'rightArm' | 'leftElbow' | 'rightElbow' | 'leftLeg' | 'rightLeg' | 'leftKnee' | 'rightKnee';
@@ -135,11 +135,11 @@ export class CompositionWorkspace {
     }
     private emit() { this.changed(this.items.map(({ id, name, kind, ...item }) => ({ id, name, kind, ...(kind === 'cloth' ? { material: (item as ClothItem).material, color: (item as ClothItem).color } : kind==='box'||kind==='sphere'?{dimensions:[...(item as SolidItem).dimensions] as [number,number,number]}:{}) })), this.selected, this.part); }
     private params(material: MaterialId): SimParams { return { ...MATERIALS[material], stretch: 0, gravity: 9.81, windX: .3, windZ: 1, windStrength: this.wind, selfCollision: true, ...this.colliders, sphere: off, box: off }; }
-    async addCloth(preset: PresetId, material: MaterialId, color: string) {
+    async addCloth(preset: PresetId, material: MaterialId, color: string, sheet:SheetSettings=DEFAULT_SHEET, pin:PinMode='two') {
         if (this.items.filter(i => i.kind === 'cloth').length >= 6)
             throw new Error('На столе можно разместить до 6 тканей.');
         const id = ++this.jobId;
-        const build = await new Promise<ClothBuild>((resolve, reject) => { this.jobs.set(id, { resolve, reject }); this.jobTimeouts.set(id, setTimeout(() => { this.jobs.delete(id); this.jobTimeouts.delete(id); reject(new Error("Подготовка заняла слишком долго. Попробуйте снова.")); }, 15000)); this.worker.postMessage({ id, args: [preset, preset === 'tube' || preset === 'free' ? 'none' : 'top', DEFAULT_SLEEVE, DEFAULT_SKIRT, DEFAULT_LEGS, DEFAULT_BODY, .6] }); });
+        const build = await new Promise<ClothBuild>((resolve, reject) => { this.jobs.set(id, { resolve, reject }); this.jobTimeouts.set(id, setTimeout(() => { this.jobs.delete(id); this.jobTimeouts.delete(id); reject(new Error("Подготовка заняла слишком долго. Попробуйте снова.")); }, 15000)); this.worker.postMessage({ id, args: [preset, preset === 'tube' ? 'none' : preset==='two'?pin:'top', DEFAULT_SLEEVE, DEFAULT_SKIRT, DEFAULT_LEGS, DEFAULT_BODY, .6,sheet] }); });
         if (this.disposed)
             return;
         const total = this.items.reduce((n, i) => n + (i.kind === 'cloth' ? i.sim.n : 0), 0) + build.pinned.length;

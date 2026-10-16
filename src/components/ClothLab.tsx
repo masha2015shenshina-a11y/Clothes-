@@ -6,8 +6,7 @@ import {Icon} from "./Icon";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ClothEngine, webglAvailable, DEFAULT_DIFFUSE, DEFAULT_DIRECTIONAL, type LightSettings, type Selection, type EngineSettings } from "@/lib/cloth/engine";
 import {
-  DEFAULT_SKIRT, DEFAULT_LEGS, type SkirtSettings, type LegsSettings, type LegPose, MATERIALS, DEFAULT_SLEEVE, type SleeveSettings,
-  PIN_LABELS,
+  DEFAULT_SHEET, type SheetSettings, DEFAULT_SKIRT, DEFAULT_LEGS, type SkirtSettings, type LegsSettings, type LegPose, MATERIALS, DEFAULT_SLEEVE, type SleeveSettings,
   PRESETS,
   type ClothBuild,
   type ColliderState,
@@ -20,7 +19,7 @@ const SWATCHES = ["#c0603d", "#8e3b2e", "#d9a35b", "#4f6b5a", "#2f4a6b", "#e8e1d
 
 type PanelTab='clothes'|'pose'|'scene'|'physics';
 const PanelContext=createContext<PanelTab>('clothes');
-const SECTION_TAB:Record<string,PanelTab>={"Одежда туловища":"clothes","Юбка":"clothes","Брюки":"clothes","Рукав":"clothes","Материал":"clothes","Туловище":"pose","Руки":"pose","Ноги":"pose","Таз":"pose","Плечо":"pose","Физика":"physics","Качество":"physics"};
+const SECTION_TAB:Record<string,PanelTab>={"Размер полотна":"clothes","Крепление":"clothes","Одежда туловища":"clothes","Юбка":"clothes","Брюки":"clothes","Рукав":"clothes","Материал":"clothes","Туловище":"pose","Руки":"pose","Ноги":"pose","Таз":"pose","Плечо":"pose","Физика":"physics","Качество":"physics"};
 function Section({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) {
  useLanguage();
   const tab=useContext(PanelContext);
@@ -108,7 +107,8 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
   const [rotateMode,setRotateMode]=useState(false);
   const [quality,setQuality]=useState(.8);
   const [meshCount,setMeshCount]=useState(0);
-  const [preset, setPreset] = useState<PresetId>("wide");
+  const [sheet,setSheet]=useState<SheetSettings>({...DEFAULT_SHEET});
+  const [preset, setPreset] = useState<PresetId>("two");
   const [pin, setPin] = useState<PinMode>("two");
   const [material, setMaterial] = useState<MaterialId>("cotton");
   const [color, setColor] = useState("#c0603d");
@@ -132,8 +132,8 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
   const [stiffness, setStiffness] = useState(1);
   const [wireframe, setWireframe] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [sphere, setSphere] = useState<ColliderState>(PRESETS.find(p=>p.id==="wide")!.sphere);
-  const [box, setBox] = useState<ColliderState>(PRESETS.find(p=>p.id==="wide")!.box);
+  const [sphere, setSphere] = useState<ColliderState>(PRESETS.find(p=>p.id==="two")!.sphere);
+  const [box, setBox] = useState<ColliderState>(PRESETS.find(p=>p.id==="two")!.box);
   const fpsRef=useRef<HTMLSpanElement>(null);
   const [,refreshControls]=useState(0);
   const [resetTick, setResetTick] = useState(0);
@@ -154,19 +154,19 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
-  type Snapshot = {quality:number;settings:EngineSettings;preset:PresetId;pin:PinMode;released:boolean;runtime:ReturnType<ClothEngine["captureRuntime"]>};
+  type Snapshot = {sheet:SheetSettings;quality:number;settings:EngineSettings;preset:PresetId;pin:PinMode;released:boolean;runtime:ReturnType<ClothEngine["captureRuntime"]>};
   const restorePending=useRef<ReturnType<ClothEngine["captureRuntime"]>>(null);
   const past=useRef<{before:Snapshot;after:Snapshot}[]>([]),future=useRef<{before:Snapshot;after:Snapshot}[]>([]);
   const pending=useRef<Snapshot|null>(null);
   const activePointer=useRef(false);
   const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const [historyCount,setHistoryCount]=useState([0,0]);
-  const captureRef=useRef<()=>Snapshot>(()=>({quality,settings,preset,pin,released,runtime:null}));
-  captureRef.current=()=>({quality,settings:structuredClone(settings),preset,pin,released,runtime:engineRef.current?.captureRuntime()??null});
+  const captureRef=useRef<()=>Snapshot>(()=>({sheet:{...sheet},quality,settings,preset,pin,released,runtime:null}));
+  captureRef.current=()=>({sheet:{...sheet},quality,settings:structuredClone(settings),preset,pin,released,runtime:engineRef.current?.captureRuntime()??null});
   const commit=()=>{
     if(timer.current)clearTimeout(timer.current);timer.current=null;
     const before=pending.current;if(!before)return;pending.current=null;const after=captureRef.current();
-    const key=(s:Snapshot)=>JSON.stringify([s.quality,s.settings,s.preset,s.pin,s.released,s.runtime?.camera,s.runtime?.target,s.runtime?.revision]);
+    const key=(s:Snapshot)=>JSON.stringify([s.sheet,s.quality,s.settings,s.preset,s.pin,s.released,s.runtime?.camera,s.runtime?.target,s.runtime?.revision]);
     if(key(before)===key(after))return;
     past.current.push({before,after});
     const bytes=(s:Snapshot)=>s.runtime?s.runtime.x.byteLength+s.runtime.p.byteLength+s.runtime.baseW.byteLength:0;
@@ -181,7 +181,7 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
   };
   const end=()=>{activePointer.current=false;if(timer.current)clearTimeout(timer.current);timer.current=setTimeout(()=>{commit();refreshControls(v=>v+1);},60);};
   const restore=(v:Snapshot)=>{
-    setQuality(v.quality);if(["body","skirt","pants"].includes(v.preset))setShowMannequin(v.settings.mannequin);
+    setSheet({...v.sheet});setQuality(v.quality);if(["body","skirt","pants"].includes(v.preset))setShowMannequin(v.settings.mannequin);
     const s=v.settings;setParts(s.parts??{...DEFAULT_PARTS});restorePending.current=v.runtime;
     setBody(structuredClone(s.body));setTheme(s.theme);setSkirt({...s.skirt});setLegs(structuredClone(s.legs));
     setPreset(v.preset);setPin(v.pin);setReleased(v.released);setMaterial(s.material);setColor(s.color);
@@ -253,11 +253,11 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
             finishFrame=requestAnimationFrame(()=>{if(cancelled)return;preparingRef.current=false;eng.applySettings(settingsRef.current);setPreparing(false);});
           }catch{fail();}
         };
-        worker.postMessage({id,args:[preset,pin,sleeve,skirt,legs,body,quality]});
+        worker.postMessage({id,args:[preset,pin,sleeve,skirt,legs,body,quality,sheet]});
       }catch{fail();}
     },60);
     return ()=>{cancelled=true;clearTimeout(timer);cancelAnimationFrame(finishFrame);};
-  }, [quality,preset, pin, resetTick, glError, sleeve.length, sleeve.ease, skirt.length,skirt.width,skirt.style,skirt.folds,legs.length,legs.ease,body.on,body.sleeves,body.arms,body.tunic,body.length,body.ease,body.cape,body.capeLength,body.hood]);
+  }, [sheet.width,sheet.length,quality,preset, pin, resetTick, glError, sleeve.length, sleeve.ease, skirt.length,skirt.width,skirt.style,skirt.folds,legs.length,legs.ease,body.on,body.sleeves,body.arms,body.tunic,body.length,body.ease,body.cape,body.capeLength,body.hood]);
 
   const choosePreset = (id: PresetId) => {
     setRotateMode(false);engineRef.current?.setRotationMode(false);
@@ -272,9 +272,9 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
 
   const resetAll = () => {
     setParts({...DEFAULT_PARTS});setRotateMode(false);engineRef.current?.setRotationMode(false);
-    const standard = PRESETS.find(p => p.id === "wide")!;
+    const standard = PRESETS.find(p => p.id === "two")!;
     setBody(structuredClone(DEFAULT_BODY));setTheme("light");setSkirt({...DEFAULT_SKIRT});setLegs(structuredClone(DEFAULT_LEGS));
-    setPreset("wide"); setPin("two"); setMaterial("cotton");
+    setSheet({...DEFAULT_SHEET});setPreset("two"); setPin("two"); setMaterial("cotton");
     setWindEnabled(true);setWindHeight(1.05);setColor("#c0603d"); setWind(2.2); setWindAngle(15); setWindElevation(0);
     setGravity(9.81); setStiffness(1); setSelfCollision(true);
     setSleeve({...DEFAULT_SLEEVE}); setSphere({...standard.sphere}); setBox({...standard.box});
@@ -434,9 +434,8 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
             </Section>
             {tr(preset==="body"&&<Section title="Таз">{tr((["x","y","z"] as const).map(axis=><Slider key={axis} label={axis} value={legs[axis]} min={axis==="y"?.4:-3} max={3.5} step={.01} onChange={v=>setLegs({...legs,[axis]:v})}/>))}</Section>)}
           </>)}
-          {tr(def.rect && <Section title="Крепление">
-            <Seg options={(Object.keys(PIN_LABELS) as PinMode[]).map((id) => ({ id, label: PIN_LABELS[id] }))} value={pin} onChange={setPin} />
-          </Section>)}
+          {preset==='two'&&<Section title="Размер полотна"><Slider label="Ширина" value={sheet.width} min={.3} max={4} step={.05} unit=" м" onChange={width=>setSheet({...sheet,width})}/><Slider label="Длина" value={sheet.length} min={.3} max={4} step={.05} unit=" м" onChange={length=>setSheet({...sheet,length})}/></Section>}
+
           {tr(preset==="sleeve" && <Section title="Плечо">
             {tr((["X","Y","Z"] as const).map(axis=>{const key=`shoulder${axis}` as "shoulderX"|"shoulderY"|"shoulderZ";return <Slider key={axis} label={axis} value={sleeve[key]??(axis==="X"?-.85:axis==="Y"?1.65:0)} min={axis==="Y"?.5:-3} max={3.5} step={.01} onChange={v=>setSleeve({...sleeve,[key]:v})}/>;}))}
             <Slider label="Подъём плеча" value={sleeve.shoulderPitch??0} min={-80} max={80} step={1} unit="°" digits={0} onChange={shoulderPitch=>setSleeve({...sleeve,shoulderPitch})}/>

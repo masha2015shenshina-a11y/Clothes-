@@ -6,6 +6,7 @@ export const EN: Record<string, string> = Object.fromEntries(`
 2. Вращайте вид за свободное место. Масштаб - колесом или двумя пальцами.|2. Drag empty space to orbit. Scroll or pinch to zoom.
 3. Тяните ткань, а объекты - за цветные оси. Двойное нажатие удаляет опору.|3. Drag cloth or use coloured axes for objects. Double-click a pin to remove it.
 Понятно|Got it
+Размер полотна|Sheet size
 Диаметр|Diameter
 До 8 объёмных объектов.|Up to 8 solid objects.
 + Отдельный манекен|+ Mannequin
