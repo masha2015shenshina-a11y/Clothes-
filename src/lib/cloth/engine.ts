@@ -1,3 +1,4 @@
+import { t as translate } from '../i18n';
 import {RotationTool} from './rotationTool';
 import type {BodyParts,BodyPart} from '../../components/BodyMap';
 import {followLegPose,updateLegGuides} from './legCloth';
@@ -541,11 +542,11 @@ export class ClothEngine {
     m.color.set(s.color);
     m.roughness = M.roughness;
     m.sheen = M.sheen;
-    m.sheenRoughness = s.material === "silk" ? 0.3 : 0.8;
+    m.sheenRoughness = s.material === "silk" ? 0.55 : 0.8;
     m.sheenColor.set(s.color).lerp(new THREE.Color("#ffffff"), 0.55);
-    m.bumpMap = tex;
+    m.bumpMap = s.material === "silk" ? null : tex;
     m.bumpScale = M.bump * 0.004;
-    m.specularIntensity = s.material === "silk" ? 0.9 : 0.35;
+    m.specularIntensity = s.material === "silk" ? 0.55 : 0.35;
     m.wireframe = s.wireframe;
     if(previous.material!==s.material||previous.wireframe!==s.wireframe||!m.version)m.needsUpdate = true;
     }
@@ -608,6 +609,8 @@ export class ClothEngine {
     this.rebuildPinGroups();
     this.syncGeometry();
   }
+
+  refreshPinText(){this.pinLabels.forEach((el,i)=>{el.title=translate(`ОПОРА ${i+1} · ДВОЙНОЕ НАЖАТИЕ: УДАЛИТЬ`);el.setAttribute("aria-label",translate(`Опора ${i+1}`));});}
 
   get counts() {
     return { particles: this.sim?.n ?? 0, constraints: this.sim?.m ?? 0 };
@@ -746,7 +749,7 @@ export class ClothEngine {
   }
   updatePinLabels() {
     while(this.pinLabels.length>this.pinGroups.length)this.pinLabels.pop()!.remove();
-    while(this.pinLabels.length<this.pinGroups.length){const i=this.pinLabels.length,el=document.createElement("button");el.className="pin-number";el.textContent=String(i+1);el.title=`ОПОРА ${i+1} · ДВОЙНОЕ НАЖАТИЕ: УДАЛИТЬ`;el.setAttribute("aria-label",`Опора ${i+1}`);el.style.pointerEvents="none";this.labelLayer.appendChild(el);this.pinLabels.push(el);}
+    while(this.pinLabels.length<this.pinGroups.length){const i=this.pinLabels.length,el=document.createElement("button");el.className="pin-number";el.textContent=String(i+1);el.title=translate(`ОПОРА ${i+1} · ДВОЙНОЕ НАЖАТИЕ: УДАЛИТЬ`);el.setAttribute("aria-label",translate(`Опора ${i+1}`));el.style.pointerEvents="none";this.labelLayer.appendChild(el);this.pinLabels.push(el);}
     const positions=this.pins.geometry.getAttribute("position");
     if(!positions)return;
     const w=this.viewportWidth,h=this.viewportHeight,p=this.labelPoint;

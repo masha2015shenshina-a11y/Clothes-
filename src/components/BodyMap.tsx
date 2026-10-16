@@ -1,3 +1,4 @@
+import { t as tr, useLanguage } from '../lib/i18n';
 export const DEFAULT_PARTS = { head: true, torso: true, pelvis: true, leftArm: true, rightArm: true, leftLeg: true, rightLeg: true };
 export type BodyPart = keyof typeof DEFAULT_PARTS;
 export type BodyParts = typeof DEFAULT_PARTS;
@@ -8,8 +9,9 @@ export function BodyMap({ parts, onToggle, onAll }: {
     onToggle: (part: BodyPart) => void;
     onAll: (on: boolean) => void;
 }) {
-    return <div className="body-map"><svg viewBox="0 0 100 158" aria-label="Включение частей манекена">{(Object.keys(shapes) as BodyPart[]).map(part => <path key={part} d={shapes[part]} role="button" tabIndex={0} aria-label={labels[part]} aria-pressed={parts[part]} data-on={parts[part]} onClick={() => onToggle(part)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') {
+ useLanguage();
+    return <div className="body-map"><svg viewBox="0 0 100 158" aria-label={tr("Включение частей манекена")}>{tr((Object.keys(shapes) as BodyPart[]).map(part => <path key={part} d={shapes[part]} role="button" tabIndex={0} aria-label={tr(labels[part])} aria-pressed={parts[part]} data-on={parts[part]} onClick={() => onToggle(part)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         onToggle(part);
-    } }}><title>{`${labels[part]}: ${parts[part] ? 'выключить' : 'включить'}`}</title></path>)}</svg><div><p className="lab-label">Манекен</p><p className="my-2 text-xs text-muted-foreground">Нажмите на часть тела</p><div className="flex flex-wrap gap-1"><button className="lab-btn" onClick={() => onAll(true)}>Весь</button><button className="lab-btn" onClick={() => onAll(false)}>Скрыть</button></div></div></div>;
+    } }}><title>{tr(`${labels[part]}: ${parts[part] ? 'выключить' : 'включить'}`)}</title></path>))}</svg><div><p className="lab-label">{tr("Манекен")}</p><p className="my-2 text-xs text-muted-foreground">{tr("Нажмите на часть тела")}</p><div className="flex flex-wrap gap-1"><button className="lab-btn" onClick={() => onAll(true)}>{tr("Весь")}</button><button className="lab-btn" onClick={() => onAll(false)}>{tr("Скрыть")}</button></div></div></div>;
 }

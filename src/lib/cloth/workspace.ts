@@ -12,7 +12,8 @@ export const PARTS: Record<Part, string> = { root: 'Весь манекен', to
 export interface ItemInfo {
     id: number;
     name: string;
-    kind: 'cloth' | 'body';
+    kind: 'cloth' | 'body' | 'box' | 'sphere';
+    dimensions?: [number, number, number];
     material?: MaterialId;
     color?: string;
 }
@@ -33,7 +34,8 @@ interface BodyItem extends ItemInfo {
     group: T.Group;
     meshes: T.Mesh[];
 }
-type Item = ClothItem | BodyItem;
+interface SolidItem extends ItemInfo { kind: 'box' | 'sphere'; mesh: T.Mesh<T.BufferGeometry,T.MeshStandardMaterial>; dimensions: [number,number,number]; }
+type Item = ClothItem | BodyItem | SolidItem;
 const off = { on: false, x: 0, y: 0, z: 0, r: 1, s: 1 };
 const rad = T.MathUtils.degToRad, deg = T.MathUtils.radToDeg;
 export interface WorkspaceLighting {ambient:number;ambientColor:string;ambientOn:boolean;key:number;keyColor:string;keyOn:boolean;azimuth:number;elevation:number;}
@@ -89,7 +91,8 @@ export class CompositionWorkspace {
     private colliders: {
         capsules: NonNullable<SimParams['capsules']>;
         ellipsoids: NonNullable<SimParams['ellipsoids']>;
-    } = { capsules: [], ellipsoids: [] };
+        boxes: NonNullable<SimParams['boxes']>;
+    } = { capsules: [], ellipsoids: [], boxes: [] };
     constructor(private host: HTMLElement, private changed: (items: ItemInfo[], id: number, part: Part) => void, private fps: (n: number) => void) {
         this.renderer = new T.WebGLRenderer({ antialias: true, alpha: false });
         this.renderer.setPixelRatio(Math.min(1.5, devicePixelRatio));
@@ -130,7 +133,7 @@ export class CompositionWorkspace {
         this.invalidate();
         window.dispatchEvent(new Event('cloth-ready'));
     }
-    private emit() { this.changed(this.items.map(({ id, name, kind, ...item }) => ({ id, name, kind, ...(kind === 'cloth' ? { material: (item as ClothItem).material, color: (item as ClothItem).color } : {}) })), this.selected, this.part); }
+    private emit() { this.changed(this.items.map(({ id, name, kind, ...item }) => ({ id, name, kind, ...(kind === 'cloth' ? { material: (item as ClothItem).material, color: (item as ClothItem).color } : kind==='box'||kind==='sphere'?{dimensions:[...(item as SolidItem).dimensions] as [number,number,number]}:{}) })), this.selected, this.part); }
     private params(material: MaterialId): SimParams { return { ...MATERIALS[material], stretch: 0, gravity: 9.81, windX: .3, windZ: 1, windStrength: this.wind, selfCollision: true, ...this.colliders, sphere: off, box: off }; }
     async addCloth(preset: PresetId, material: MaterialId, color: string) {
         if (this.items.filter(i => i.kind === 'cloth').length >= 6)
@@ -163,6 +166,22 @@ export class CompositionWorkspace {
         this.rebuildContacts();
         this.select(item.id);
         this.invalidate();
+    }
+    addSolid(kind: 'box' | 'sphere') {
+        if(this.items.filter(i=>i.kind==='box'||i.kind==='sphere').length>=8) throw new Error('До 8 объёмных объектов.');
+        const mesh=new T.Mesh(kind==='box'?new T.BoxGeometry(1,1,1):new T.SphereGeometry(.5,24,16),new T.MeshStandardMaterial({color:'#938b7d',roughness:.7}));
+        const id=++this.sequence;
+        const item:SolidItem={id,name:`${kind==='box'?'Куб':'Шар'} ${id}`,kind,mesh,dimensions:[1,1,1]};
+        mesh.position.set(0,.5,0);mesh.userData.item=id;
+        this.items.push(item);this.scene.add(mesh);this.refreshColliders();this.select(id);this.invalidate();
+    }
+    setDimensions(values: [number,number,number]) {
+        const item=this.items.find(i=>i.id===this.selected);
+        if(!item||(item.kind!=='box'&&item.kind!=='sphere'))return;
+        const d=values.map(v=>T.MathUtils.clamp(Number.isFinite(v)?v:1,.1,4)) as [number,number,number];
+        item.dimensions=item.kind==='sphere'?[d[0],d[0],d[0]]:d;
+        item.mesh.scale.fromArray(item.dimensions);
+        this.refreshColliders();this.emit();this.invalidate();
     }
     addBody() {
         if (this.items.filter(i => i.kind === 'body').length >= 3)
@@ -220,7 +239,7 @@ export class CompositionWorkspace {
         if(item.orientation)for(const mesh of item.meshes){mesh.position.copy(this.worldPoint(item,mesh.position.toArray()));mesh.quaternion.premultiply(item.orientation);}
     }
     private refreshColliders() {
-        const capsules: NonNullable<SimParams['capsules']> = [], ellipsoids: NonNullable<SimParams['ellipsoids']> = [];
+        const capsules: NonNullable<SimParams['capsules']> = [], ellipsoids: NonNullable<SimParams['ellipsoids']> = [], boxes: NonNullable<SimParams['boxes']>=[];
         for (const i of this.items)
             if (i.kind === 'body') {
                 ellipsoids.push(...bodyEllipsoids(i.root,true,i.body).map(e=>{const p=this.worldPoint(i,[e.x,e.y,e.z]),q=i.orientation??new T.Quaternion();const basis=e.basis??[1,0,0,0,1,0,0,0,1];return {...e,x:p.x,y:p.y,z:p.z,basis:[0,3,6].flatMap(k=>new T.Vector3(...basis.slice(k,k+3)).applyQuaternion(q).toArray())};}));
@@ -229,7 +248,11 @@ export class CompositionWorkspace {
                     capsules.push({ a: a[0], b: a[1], r: .105 }, { a: a[1], b: a[2], r: .09 }, { a: l[0], b: l[1], r: LEG_RADIUS }, { a: l[1], b: l[2], r: LEG_RADIUS });
                 }
             }
-        this.colliders = { capsules, ellipsoids };
+        for(const i of this.items) {
+            if(i.kind==='sphere'){const p=i.mesh.position,r=i.dimensions[0]/2;capsules.push({a:p.toArray(),b:p.toArray(),r});}
+            if(i.kind==='box'){const p=i.mesh.position,q=i.mesh.quaternion;boxes.push({on:true,x:p.x,y:p.y,z:p.z,s:1,width:i.dimensions[0],height:i.dimensions[1],depth:i.dimensions[2],basis:[new T.Vector3(1,0,0),new T.Vector3(0,1,0),new T.Vector3(0,0,1)].flatMap(v=>v.applyQuaternion(q).toArray())});}
+        }
+        this.colliders = { capsules, ellipsoids, boxes };
         for (const i of this.items)
             if (i.kind === 'cloth')
                 Object.assign(i.sim.params, this.colliders);
@@ -250,7 +273,8 @@ export class CompositionWorkspace {
             this.proxy.quaternion.copy(item.anchor.quaternion);
             this.gizmo.setMode(this.mode);
         }
-        else {
+        else if(item.kind==='box'||item.kind==='sphere'){this.proxy.position.copy(item.mesh.position);this.proxy.quaternion.copy(item.mesh.quaternion);this.gizmo.setMode(this.mode);}
+        else if(item.kind==='body') {
             const r = item.root, b = item.body, part = this.part, side: Side = part.startsWith('left') ? 'left' : 'right';
             let position: number[] = [r.x, r.y, r.z];
             this.gizmo.setMode(part === 'root' ? this.mode : 'rotate');
@@ -281,7 +305,7 @@ export class CompositionWorkspace {
         this.lastMatrix.copy(this.proxy.matrixWorld);
         this.gizmo.attach(this.proxy);
         for (const i of this.items) {
-            if (i.kind === 'cloth')
+            if (i.kind !== 'body')
                 i.mesh.material.emissive.set(i.id === item.id ? '#24180b' : '#000000');
             else
                 for (const m of i.meshes)
@@ -308,7 +332,8 @@ export class CompositionWorkspace {
             item.sim.syncColliderHistory();
             this.syncCloth(item);
         }
-        else {
+        else if(item.kind==='box'||item.kind==='sphere'){item.mesh.position.copy(this.proxy.position);item.mesh.quaternion.copy(this.proxy.quaternion);this.refreshColliders();}
+        else if(item.kind==='body') {
             const localRotation=new T.Euler().setFromQuaternion((item.orientation??new T.Quaternion()).clone().invert().multiply(this.proxy.quaternion));
             const b = item.body, r = item.root, p = this.part, side: Side = p.startsWith('left') ? 'left' : 'right', x = deg(localRotation.x), z = deg(localRotation.z), clamp = T.MathUtils.clamp;
             if(p==='root'&&this.mode==='rotate'){item.orientation=this.proxy.quaternion.clone();}
@@ -350,7 +375,7 @@ export class CompositionWorkspace {
         this.invalidate();
     } }
     remove() { const k = this.items.findIndex(i => i.id === this.selected); if (k < 0)
-        return; this.gizmo.detach(); const i = this.items.splice(k, 1)[0], object = i.kind === 'cloth' ? i.mesh : i.group; this.scene.remove(object); object.traverse(o => { if (o instanceof T.Mesh) {
+        return; this.gizmo.detach(); const i = this.items.splice(k, 1)[0], object = i.kind === 'body' ? i.group : i.mesh; this.scene.remove(object); object.traverse(o => { if (o instanceof T.Mesh) {
         o.geometry.dispose();
         for (const m of Array.isArray(o.material) ? o.material : [o.material])
             m.dispose();
@@ -399,7 +424,7 @@ export class CompositionWorkspace {
     } pos.needsUpdate = normal.needsUpdate = true; }
     private pointerDown = (e: PointerEvent) => { this.down = [e.clientX, e.clientY]; };
     private pointerUp = (e: PointerEvent) => { if (this.dragging || this.gizmo.axis || Math.hypot(e.clientX - this.down[0], e.clientY - this.down[1]) > 4)
-        return; const r = this.renderer.domElement.getBoundingClientRect(); this.pointer.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); this.ray.setFromCamera(this.pointer, this.camera); const meshes = this.items.flatMap(i => i.kind === 'cloth' ? [i.mesh] : i.meshes); for (const m of meshes)
+        return; const r = this.renderer.domElement.getBoundingClientRect(); this.pointer.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); this.ray.setFromCamera(this.pointer, this.camera); const meshes = this.items.flatMap(i => i.kind === 'body' ? i.meshes : [i.mesh]); for (const m of meshes)
         m.geometry.computeBoundingSphere(); const hit = this.ray.intersectObjects(meshes, false)[0]; if (hit)
         this.select(hit.object.userData.item, hit.object.userData.part ?? 'root'); };
     private resize() { this.renderer.setSize(Math.max(1, this.host.clientWidth), Math.max(1, this.host.clientHeight)); this.camera.aspect = Math.max(1, this.host.clientWidth) / Math.max(1, this.host.clientHeight); this.camera.updateProjectionMatrix(); this.invalidate(); }

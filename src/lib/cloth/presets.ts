@@ -88,7 +88,7 @@ export interface MaterialDef {
 
 export const MATERIALS: Record<MaterialId, MaterialDef> = {
   cotton: { label: "Хлопок", shear: 2e-7, bend: 3e-6, damping: 0.6, density: 1, friction: 0.45, roughness: 0.85, sheen: 0.45, bump: 0.6, weave: "plain", texScale: 28 },
-  silk: { label: "Шёлк", shear: 1e-6, bend: 4e-5, damping: 0.25, density: 0.45, friction: 0.12, roughness: 0.35, sheen: 1, bump: 0.12, weave: "fine", texScale: 60 },
+  silk: { label: "Шёлк", shear: 1e-6, bend: 4e-5, damping: 0.25, density: 0.45, friction: 0.12, roughness: 0.45, sheen: 1, bump: 0.12, weave: "fine", texScale: 60 },
   linen: { label: "Лён", shear: 1e-7, bend: 1.2e-6, damping: 0.8, density: 1.2, friction: 0.55, roughness: 0.95, sheen: 0.2, bump: 1, weave: "slub", texScale: 18 },
   denim: { label: "Деним", shear: 2e-8, bend: 2.5e-7, damping: 1.2, density: 2.2, friction: 0.65, roughness: 0.9, sheen: 0.15, bump: 1.3, weave: "twill", texScale: 22 },
 };

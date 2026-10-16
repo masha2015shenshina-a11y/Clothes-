@@ -31,8 +31,7 @@ export class BoxContacts {
         }
         return true;
     }
-    solve(sim: ClothSim) {
-        const B = sim.params.box;
+    solve(sim: ClothSim, B = sim.params.box) {
         if (!B.on)
             return 0;
         this.hx = (B.width ?? B.s) / 2 + sim.thickness;

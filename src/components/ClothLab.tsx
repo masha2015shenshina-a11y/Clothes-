@@ -1,3 +1,5 @@
+import { LanguageSwitch } from './LanguageSwitch';
+import { t as tr, useLanguage } from '../lib/i18n';
 import {BodyMap,DEFAULT_PARTS,type BodyPart,type BodyParts} from './BodyMap';
 import {DEFAULT_BODY,type BodySettings,type Side} from "@/lib/cloth/mannequin";
 import {Icon} from "./Icon";
@@ -20,27 +22,29 @@ type PanelTab='clothes'|'pose'|'scene'|'physics';
 const PanelContext=createContext<PanelTab>('clothes');
 const SECTION_TAB:Record<string,PanelTab>={"Одежда туловища":"clothes","Юбка":"clothes","Брюки":"clothes","Рукав":"clothes","Материал":"clothes","Туловище":"pose","Руки":"pose","Ноги":"pose","Таз":"pose","Плечо":"pose","Физика":"physics","Качество":"physics"};
 function Section({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) {
+ useLanguage();
   const tab=useContext(PanelContext);
   if((SECTION_TAB[title]??'scene')!==tab)return null;
   return (
     <section data-section={title} className="lab-section px-3 py-3">
       <div className="mb-2.5 flex items-center justify-between">
-        <h3 className="lab-label">{title}</h3>
-        {aside}
+        <h3 className="lab-label">{tr(title)}</h3>
+        {tr(aside)}
       </div>
-      <div className="space-y-2">{children}</div>
+      <div className="space-y-2">{tr(children)}</div>
     </section>
   );
 }
 
 function Slider(p: { label: string; value: number; min: number; max: number; step: number; unit?: string; onChange: (v: number) => void; digits?: number }) {
+ useLanguage();
   return (
     <label className="block">
       <div className="mb-1 flex items-baseline justify-between text-[12.5px]">
-        <span className="text-foreground/80">{p.label}</span>
+        <span className="text-foreground/80">{tr(p.label)}</span>
         <span className="font-mono text-[11.5px] text-muted-foreground">
-          {p.value.toFixed(p.digits ?? 2)}
-          {p.unit ?? ""}
+          {tr(p.value.toFixed(p.digits ?? 2))}
+          {tr(p.unit ?? "")}
         </span>
       </div>
       <input type="range" className="lab-range" min={p.min} max={p.max} step={p.step} value={p.value} onChange={(e) => p.onChange(parseFloat(e.target.value))} />
@@ -49,42 +53,47 @@ function Slider(p: { label: string; value: number; min: number; max: number; ste
 }
 
 function Seg<T extends string>({ options, value, onChange, disabled }: { options: { id: T; label: string }[]; value: T; onChange: (v: T) => void; disabled?: boolean }) {
+ useLanguage();
   return (
     <div className={`lab-options grid grid-cols-2 gap-1 ${disabled ? "opacity-40" : ""}`}>
-      {options.map((o) => (
+      {tr(options.map((o) => (
         <button key={o.id} type="button" disabled={disabled} onClick={() => onChange(o.id)} className="lab-seg" data-active={value === o.id}>
-          {o.label}
+          {tr(o.label)}
         </button>
-      ))}
+      )))}
     </div>
   );
 }
 
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+ useLanguage();
   return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)} className="lab-switch" data-on={checked}>
+    <button type="button" role="switch" aria-checked={checked} aria-label={tr(label)} onClick={() => onChange(!checked)} className="lab-switch" data-on={checked}>
       <span />
     </button>
   );
 }
 
 function ColliderControls({ c, set, sizeLabel, max }: { c: ColliderState; set: (c: ColliderState) => void; sizeLabel: string; max: number }) {
+ useLanguage();
   return (
     <div className={c.on ? "space-y-2.5" : "pointer-events-none space-y-2.5 opacity-40"}>
       <Slider label="X" value={c.x} min={-3} max={3} step={0.01} unit=" м" onChange={(x) => set({ ...c, x })} />
       <Slider label="Y" value={c.y} min={0} max={3.5} step={0.01} unit=" м" onChange={(y) => set({ ...c, y })} />
       <Slider label="Z" value={c.z} min={-3} max={3} step={0.01} unit=" м" onChange={(z) => set({ ...c, z })} />
-      {sizeLabel!=="Ребро" && <Slider label={sizeLabel} value={c.size} min={0.1} max={max} step={0.01} unit=" м" onChange={(size) => set({ ...c, size })} />}
-      {sizeLabel==="Ребро"&&(["width","height","depth"] as const).map((axis,i)=><Slider key={axis} label={["Ширина","Высота","Глубина"][i]} value={c[axis]??c.size} min={.1} max={3} step={.01} unit=" м" onChange={v=>set({...c,[axis]:v})}/>)}
+      {tr(sizeLabel!=="Ребро" && <Slider label={sizeLabel} value={c.size} min={0.1} max={max} step={0.01} unit=" м" onChange={(size) => set({ ...c, size })} />)}
+      {tr(sizeLabel==="Ребро"&&(["width","height","depth"] as const).map((axis,i)=><Slider key={axis} label={["Ширина","Высота","Глубина"][i]} value={c[axis]??c.size} min={.1} max={3} step={.01} unit=" м" onChange={v=>set({...c,[axis]:v})}/>))}
     </div>
   );
 }
 
 function LimbButtons({kind,side,linked,onSelect}:{kind:"Leg"|"BodyArm";side:Side;linked:boolean;onSelect:(mode:Side|"both")=>void}){
- return <div className="flex gap-1">{(["left","both","right"] as const).map(mode=><button key={mode} type="button" className="lab-btn icon-btn" title={mode==="both"?"ВМЕСТЕ":`${mode==="left"?"ЛЕВАЯ":"ПРАВАЯ"} ${kind==="Leg"?"НОГА":"РУКА"}`} aria-label={mode==="both"?"Вместе":`${mode==="left"?"Левая":"Правая"} ${kind==="Leg"?"нога":"рука"}`} aria-pressed={mode==="both"?linked:!linked&&side===mode} data-selected={mode==="both"?linked:!linked&&side===mode} onClick={()=>onSelect(mode)}><Icon name={mode==="both"?`both${kind}`:`${mode}${kind}`}/></button>)}</div>;
+ useLanguage();
+ return <div className="flex gap-1">{tr((["left","both","right"] as const).map(mode=><button key={mode} type="button" className="lab-btn icon-btn" title={tr(mode==="both"?"ВМЕСТЕ":`${mode==="left"?"ЛЕВАЯ":"ПРАВАЯ"} ${kind==="Leg"?"НОГА":"РУКА"}`)} aria-label={tr(mode==="both"?"Вместе":`${mode==="left"?"Левая":"Правая"} ${kind==="Leg"?"нога":"рука"}`)} aria-pressed={mode==="both"?linked:!linked&&side===mode} data-selected={mode==="both"?linked:!linked&&side===mode} onClick={()=>onSelect(mode)}><Icon name={mode==="both"?`both${kind}`:`${mode}${kind}`}/></button>))}</div>;
 }
 
 export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?:()=>void}) {
+ const language=useLanguage();
   const activeRef=useRef(active);activeRef.current=active;
   const hostRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<ClothEngine | null>(null);
@@ -280,6 +289,7 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
   const selectArm=(mode:Side|"both")=>{const side=mode==="both"?armSide:mode;setArmSide(side);setBody(b=>({...b,linked:mode==="both"}));setSelected(side==="left"?"leftBodyArm":"rightBodyArm");};
   useEffect(()=>{if(["leftLeg","rightLeg","leftBodyArm","rightBodyArm","torso","head","legs","shoulder","arm"].includes(selected))setPanelTab("pose");else if(["diffuse","directional","sphere","box","wind","pins"].includes(selected))setPanelTab("scene");else setPanelTab("clothes");},[selected]);
 
+  useEffect(()=>{engineRef.current?.refreshPinText();},[language]);
   const visibleParts=Object.fromEntries(Object.keys(parts).map(k=>[k,mannequin&&showMannequin&&parts[k as BodyPart]&&(k.includes('Leg')?legs.on:k==='pelvis'?true:k.includes('Arm')?body.on&&body.arms:body.on)])) as BodyParts;
   const setBodyParts=(next:BodyParts)=>{setParts(next);setShowMannequin(true);setLegs(l=>({...l,on:true}));setBody(b=>({...b,on:true,arms:true}));if(!mannequin)choosePreset('body');};
   const togglePart=(part:BodyPart)=>setBodyParts({...visibleParts,[part]:!visibleParts[part]});
@@ -288,17 +298,17 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
     <div className="flex h-dvh flex-col bg-background text-foreground" onPointerDownCapture={begin} onPointerUpCapture={end} onPointerCancelCapture={end} onInputCapture={e=>{if(!pending.current)begin(e);if(!activePointer.current)end();}} onKeyDownCapture={e=>{if(!e.ctrlKey&&!e.metaKey)begin(e);}} onKeyUpCapture={end}>
       <header className="flex h-11 shrink-0 items-center justify-between border-b border-border px-4">
         <div className="flex items-baseline gap-2">
-          <span className="font-display text-[17px] font-semibold tracking-tight">Складка</span>
+          <span className="font-display text-[17px] font-semibold tracking-tight">Skladka</span>
           <img src="./icon.svg" width="25" height="25" alt="" className="order-first self-center"/>
         </div>
         <div className="flex items-center gap-3">
-          <button className="lab-btn" onClick={onWorkspace}>Композиция</button>
+          <LanguageSwitch/><button className="lab-btn" onClick={onWorkspace}>{tr("Композиция")}</button>
           <span className="hidden font-mono text-[11px] text-muted-foreground sm:inline">
-            {def.label} · {MATERIALS[material].label}
+            {tr(def.label)} · {tr(MATERIALS[material].label)}
           </span>
-          <button type="button" className="lab-btn icon-btn" title={theme==="dark"?"СВЕТЛАЯ ТЕМА":"ТЁМНАЯ ТЕМА"} aria-label="Тёмная тема" aria-pressed={theme==="dark"} onClick={()=>setTheme(t=>t==="light"?"dark":"light")}><Icon name={theme==="dark"?"sun":"moon"}/></button>
-          <button type="button" className="lab-btn icon-btn lab-reset" title="СБРОСИТЬ ВСЁ" aria-label="Сбросить всё" onClick={resetAll}><Icon name="resetScene"/></button>
-          <button type="button" className="lab-btn icon-btn lg:hidden" title="ПАРАМЕТРЫ" aria-label="Параметры" onClick={() => setPanelOpen((v) => !v)} aria-expanded={panelOpen}>
+          <button type="button" className="lab-btn icon-btn" title={tr(theme==="dark"?"СВЕТЛАЯ ТЕМА":"ТЁМНАЯ ТЕМА")} aria-label={tr("Тёмная тема")} aria-pressed={theme==="dark"} onClick={()=>setTheme(t=>t==="light"?"dark":"light")}><Icon name={theme==="dark"?"sun":"moon"}/></button>
+          <button type="button" className="lab-btn icon-btn lab-reset" title={tr("СБРОСИТЬ ВСЁ")} aria-label={tr("Сбросить всё")} onClick={resetAll}><Icon name="resetScene"/></button>
+          <button type="button" className="lab-btn icon-btn lg:hidden" title={tr("ПАРАМЕТРЫ")} aria-label={tr("Параметры")} onClick={() => setPanelOpen((v) => !v)} aria-expanded={panelOpen}>
             <Icon name="settings"/>
           </button>
         </div>
@@ -308,46 +318,46 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1">
             <div ref={hostRef} className="absolute inset-0" aria-busy={preparing} />
-            {preparing&&!glError&&<div className="absolute inset-0 z-30 cursor-progress"><div className="scene-loading" role="status" aria-live="polite"><span className="scene-spinner" aria-hidden="true"/>Подготавливаем сцену</div></div>}
-            {buildError&&<div className="scene-loading z-30" role="alert">{buildError}<button className="lab-btn" onClick={()=>setResetTick(t=>t+1)}>Повторить</button></div>}
-            {glError && (
+            {tr(preparing&&!glError&&<div className="absolute inset-0 z-30 cursor-progress"><div className="scene-loading" role="status" aria-live="polite"><span className="scene-spinner" aria-hidden="true"/>{tr("Подготавливаем сцену")}</div></div>)}
+            {tr(buildError&&<div className="scene-loading z-30" role="alert">{tr(buildError)}<button className="lab-btn" onClick={()=>setResetTick(t=>t+1)}>{tr("Повторить")}</button></div>)}
+            {tr(glError && (
               <div className="absolute inset-0 flex items-center justify-center p-6">
                 <div className="max-w-sm rounded-lg border border-border bg-card p-5 text-sm">
-                  <h2 className="mb-2 font-display text-base font-semibold">3D недоступно</h2>
-                  <p className="text-muted-foreground">{glError}</p>
+                  <h2 className="mb-2 font-display text-base font-semibold">{tr("3D недоступно")}</h2>
+                  <p className="text-muted-foreground">{tr(glError)}</p>
                 </div>
               </div>
-            )}
+            ))}
             <div className="absolute left-3 top-3 flex max-w-[calc(100%-24px)] flex-wrap gap-1 bg-card/95 p-1">
-              {([{id:"cloth",label:"Ткань"},{id:"pins",label:"Крепления"},{id:"sphere",label:"Шар"},{id:"box",label:"Куб"},{id:"wind",label:"Ветер"},{id:"diffuse",label:"Рассеянный свет"},{id:"directional",label:"Направленный свет"},...(mannequin?[{id:"legs",label:"Таз"}]:[]),...(preset==="sleeve"?[{id:"shoulder",label:"Плечо"},{id:"arm",label:"Локоть"}]:[])] as {id:Selection;label:string}[]).map(o=><button key={o.id} className={`lab-btn ${["diffuse","directional","legs"].includes(o.id)?"icon-btn":""}`} title={o.label.toUpperCase()} aria-label={o.label} data-selected={selected===o.id} onClick={()=>{setSelected(o.id);if(o.id==="sphere")setSphere({...sphere,on:true});if(o.id==="box")setBox({...box,on:true});}}>{["diffuse","directional","legs"].includes(o.id)?<Icon name={o.id==="legs"?"pelvis":o.id}/>:o.label}</button>)}
-              {["cloth","box","sphere"].includes(selected)&&<button className="lab-btn icon-btn" title="ВРАЩАТЬ ВЫБРАННЫЙ ОБЪЕКТ" aria-label="Вращать выбранный объект" aria-pressed={rotateMode} data-selected={rotateMode} onClick={()=>setRotateMode(v=>!v)}><Icon name="rotate"/></button>}
-              {(preset==="skirt"||preset==="pants")&&<LimbButtons kind="Leg" side={legSide} linked={legs.linked} onSelect={selectLeg}/>}
-              <button className="lab-btn icon-btn" title="ЧАСТИ МАНЕКЕНА" aria-label="Части манекена" data-selected={panelTab==="pose"} onClick={()=>{setPanelOpen(true);setPanelTab("pose");}}><Icon name="body"/></button>
-              {mannequin&&body.on&&body.arms&&<LimbButtons kind="BodyArm" side={armSide} linked={body.linked} onSelect={selectArm}/>}
-              <button className="lab-btn icon-btn" title={windEnabled?"ВЫКЛЮЧИТЬ ВЕТЕР":"ВКЛЮЧИТЬ ВЕТЕР"} aria-label={windEnabled?"Выключить ветер":"Включить ветер"} aria-pressed={windEnabled} data-selected={windEnabled} onClick={()=>setWindEnabled(v=>!v)}><Icon name="windPower"/></button>
+              {tr(([{id:"cloth",label:"Ткань"},{id:"pins",label:"Крепления"},{id:"sphere",label:"Шар"},{id:"box",label:"Куб"},{id:"wind",label:"Ветер"},{id:"diffuse",label:"Рассеянный свет"},{id:"directional",label:"Направленный свет"},...(mannequin?[{id:"legs",label:"Таз"}]:[]),...(preset==="sleeve"?[{id:"shoulder",label:"Плечо"},{id:"arm",label:"Локоть"}]:[])] as {id:Selection;label:string}[]).map(o=><button key={o.id} className={`lab-btn ${["diffuse","directional","legs"].includes(o.id)?"icon-btn":""}`} title={tr(o.label.toUpperCase())} aria-label={tr(o.label)} data-selected={selected===o.id} onClick={()=>{setSelected(o.id);if(o.id==="sphere")setSphere({...sphere,on:true});if(o.id==="box")setBox({...box,on:true});}}>{tr(["diffuse","directional","legs"].includes(o.id)?<Icon name={o.id==="legs"?"pelvis":o.id}/>:o.label)}</button>))}
+              {tr(["cloth","box","sphere"].includes(selected)&&<button className="lab-btn icon-btn" title={tr("ВРАЩАТЬ ВЫБРАННЫЙ ОБЪЕКТ")} aria-label={tr("Вращать выбранный объект")} aria-pressed={rotateMode} data-selected={rotateMode} onClick={()=>setRotateMode(v=>!v)}><Icon name="rotate"/></button>)}
+              {tr((preset==="skirt"||preset==="pants")&&<LimbButtons kind="Leg" side={legSide} linked={legs.linked} onSelect={selectLeg}/>)}
+              <button className="lab-btn icon-btn" title={tr("ЧАСТИ МАНЕКЕНА")} aria-label={tr("Части манекена")} data-selected={panelTab==="pose"} onClick={()=>{setPanelOpen(true);setPanelTab("pose");}}><Icon name="body"/></button>
+              {tr(mannequin&&body.on&&body.arms&&<LimbButtons kind="BodyArm" side={armSide} linked={body.linked} onSelect={selectArm}/>)}
+              <button className="lab-btn icon-btn" title={tr(windEnabled?"ВЫКЛЮЧИТЬ ВЕТЕР":"ВКЛЮЧИТЬ ВЕТЕР")} aria-label={tr(windEnabled?"Выключить ветер":"Включить ветер")} aria-pressed={windEnabled} data-selected={windEnabled} onClick={()=>setWindEnabled(v=>!v)}><Icon name="windPower"/></button>
             </div>
           </div>
 
           <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-t border-border bg-card px-3 py-2">
-            <button type="button" className="lab-btn icon-btn" title="ОТМЕНИТЬ" aria-label="Отменить" data-history disabled={!historyCount[0]} onClick={undo}><Icon name="undo"/></button>
-            <button type="button" className="lab-btn icon-btn" title="ВЕРНУТЬ" aria-label="Вернуть" data-history disabled={!historyCount[1]} onClick={redo}><Icon name="redo"/></button>
-            <button type="button" className="lab-btn icon-btn" title={paused?"ПРОДОЛЖИТЬ":"ПАУЗА"} aria-label={paused?"Продолжить":"Пауза"} data-primary onClick={() => setPaused((p) => !p)}>
+            <button type="button" className="lab-btn icon-btn" title={tr("ОТМЕНИТЬ")} aria-label={tr("Отменить")} data-history disabled={!historyCount[0]} onClick={undo}><Icon name="undo"/></button>
+            <button type="button" className="lab-btn icon-btn" title={tr("ВЕРНУТЬ")} aria-label={tr("Вернуть")} data-history disabled={!historyCount[1]} onClick={redo}><Icon name="redo"/></button>
+            <button type="button" className="lab-btn icon-btn" title={tr(paused?"ПРОДОЛЖИТЬ":"ПАУЗА")} aria-label={tr(paused?"Продолжить":"Пауза")} data-primary onClick={() => setPaused((p) => !p)}>
               <Icon name={paused?"play":"pause"}/>
             </button>
-            <button type="button" className="lab-btn icon-btn" aria-label="Один кадр" disabled={!paused} onClick={() => engineRef.current?.stepOnce()} title="ДОСТУПНО НА ПАУЗЕ">
+            <button type="button" className="lab-btn icon-btn" aria-label={tr("Один кадр")} disabled={!paused} onClick={() => engineRef.current?.stepOnce()} title={tr("ДОСТУПНО НА ПАУЗЕ")}>
               <Icon name="step"/>
             </button>
-            <button type="button" className="lab-btn icon-btn" title="ПЕРЕЗАПУСТИТЬ ТКАНЬ" aria-label="Перезапустить ткань" onClick={() => setResetTick((t) => t + 1)}>
+            <button type="button" className="lab-btn icon-btn" title={tr("ПЕРЕЗАПУСТИТЬ ТКАНЬ")} aria-label={tr("Перезапустить ткань")} onClick={() => setResetTick((t) => t + 1)}>
               <Icon name="resetCloth"/>
             </button>
-            <button type="button" className="lab-btn icon-btn" title="ОТПУСТИТЬ ВСЕ ОПОРЫ" aria-label="Отпустить все опоры" disabled={released} onClick={() => { engineRef.current?.releasePins(); setReleased(true); }}>
+            <button type="button" className="lab-btn icon-btn" title={tr("ОТПУСТИТЬ ВСЕ ОПОРЫ")} aria-label={tr("Отпустить все опоры")} disabled={released} onClick={() => { engineRef.current?.releasePins(); setReleased(true); }}>
               <Icon name="release"/>
             </button>
-            <button type="button" className="lab-btn icon-btn" title="ЦЕНТРИРОВАТЬ КАМЕРУ" aria-label="Центрировать камеру" onClick={() => engineRef.current?.resetCamera()}>
+            <button type="button" className="lab-btn icon-btn" title={tr("ЦЕНТРИРОВАТЬ КАМЕРУ")} aria-label={tr("Центрировать камеру")} onClick={() => engineRef.current?.resetCamera()}>
               <Icon name="camera"/>
             </button>
-            <button type="button" className="lab-btn icon-btn" title="НА ПОЛ · ВЫБРАННЫЙ ОБЪЕКТ" aria-label="Опустить выбранный объект на пол" onClick={()=>engineRef.current?.floorSelected()}><Icon name="floor"/></button>
-            <button type="button" className="lab-btn icon-btn" title="СОХРАНИТЬ PNG" aria-label="Сохранить PNG" onClick={() => engineRef.current?.snapshot()}>
+            <button type="button" className="lab-btn icon-btn" title={tr("НА ПОЛ · ВЫБРАННЫЙ ОБЪЕКТ")} aria-label={tr("Опустить выбранный объект на пол")} onClick={()=>engineRef.current?.floorSelected()}><Icon name="floor"/></button>
+            <button type="button" className="lab-btn icon-btn" title={tr("СОХРАНИТЬ PNG")} aria-label={tr("Сохранить PNG")} onClick={() => engineRef.current?.snapshot()}>
               <Icon name="save"/>
             </button>
             <div className="ml-auto flex items-center gap-3 font-mono text-[11px] text-muted-foreground">
@@ -364,100 +374,100 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
         >
           <div className="sticky top-0 z-10 border-b border-border bg-card p-3 space-y-2">
             <BodyMap parts={visibleParts} onToggle={togglePart} onAll={on=>on?setBodyParts({...DEFAULT_PARTS}):setShowMannequin(false)}/>
-            <div className="grid grid-cols-4 gap-1" role="tablist" aria-label="Настройки">{([{id:"clothes",label:"Одежда"},{id:"pose",label:"Поза"},{id:"scene",label:"Сцена"},{id:"physics",label:"Физика"}] as const).map(t=><button key={t.id} role="tab" aria-selected={panelTab===t.id} className="lab-btn" data-selected={panelTab===t.id} onClick={()=>setPanelTab(t.id)}>{t.label}</button>)}</div>
-            {panelTab==="pose"&&mannequin&&body.on&&<button className="lab-btn w-full" onClick={()=>setBody({...body,torsoPitch:0,torsoLean:0,headPitch:0,headLean:0,left:{...DEFAULT_BODY.left},right:{...DEFAULT_BODY.right}})}>Сбросить позу туловища</button>}
+            <div className="grid grid-cols-4 gap-1" role="tablist" aria-label={tr("Настройки")}>{tr(([{id:"clothes",label:"Одежда"},{id:"pose",label:"Поза"},{id:"scene",label:"Сцена"},{id:"physics",label:"Физика"}] as const).map(t=><button key={t.id} role="tab" aria-selected={panelTab===t.id} className="lab-btn" data-selected={panelTab===t.id} onClick={()=>setPanelTab(t.id)}>{tr(t.label)}</button>))}</div>
+            {tr(panelTab==="pose"&&mannequin&&body.on&&<button className="lab-btn w-full" onClick={()=>setBody({...body,torsoPitch:0,torsoLean:0,headPitch:0,headLean:0,left:{...DEFAULT_BODY.left},right:{...DEFAULT_BODY.right}})}>{tr("Сбросить позу туловища")}</button>)}
           </div>
-          {panelTab==='scene'&&<div className="px-3 pt-3"><p className="lab-label mb-2">Освещение</p><div className="grid grid-cols-2 gap-1"><button className="lab-btn" data-selected={selected==='diffuse'} onClick={()=>setSelected('diffuse')}>Рассеянный</button><button className="lab-btn" data-selected={selected==='directional'} onClick={()=>setSelected('directional')}>Направленный</button></div></div>}
-          {rotateMode&&selected==='cloth'&&mannequin&&<p className="px-3 py-2 text-xs text-muted-foreground">Поворот отделяет ткань от креплений к телу. Сброс ткани возвращает посадку.</p>}
-          <Section title="Качество"><Seg options={[{id:"0.6",label:"Лёгкая"},{id:"0.8",label:"Средняя"},{id:"1",label:"Детальная"}]} value={String(quality)} onChange={v=>setQuality(Number(v))}/><p className="text-xs text-muted-foreground">{meshCount.toLocaleString("ru-RU")} треугольников</p></Section>
-          {selected==="wind" && <Section title="Направление ветра" aside={<Toggle checked={windEnabled} onChange={setWindEnabled} label="Ветер"/>}>
+          {tr(panelTab==='scene'&&<div className="px-3 pt-3"><p className="lab-label mb-2">{tr("Освещение")}</p><div className="grid grid-cols-2 gap-1"><button className="lab-btn" data-selected={selected==='diffuse'} onClick={()=>setSelected('diffuse')}>{tr("Рассеянный")}</button><button className="lab-btn" data-selected={selected==='directional'} onClick={()=>setSelected('directional')}>{tr("Направленный")}</button></div></div>)}
+          {tr(rotateMode&&selected==='cloth'&&mannequin&&<p className="px-3 py-2 text-xs text-muted-foreground">{tr("Поворот отделяет ткань от креплений к телу. Сброс ткани возвращает посадку.")}</p>)}
+          <Section title="Качество"><Seg options={[{id:"0.6",label:"Лёгкая"},{id:"0.8",label:"Средняя"},{id:"1",label:"Детальная"}]} value={String(quality)} onChange={v=>setQuality(Number(v))}/><p className="text-xs text-muted-foreground">{tr(meshCount.toLocaleString("ru-RU"))}{tr(" треугольников")}</p></Section>
+          {tr(selected==="wind" && <Section title="Направление ветра" aside={<Toggle checked={windEnabled} onChange={setWindEnabled} label="Ветер"/>}>
             <Slider label="Наклон ветра" value={windElevation} min={-90} max={90} step={1} unit="°" digits={0} onChange={setWindElevation}/>
             <Slider label="Высота указателя" value={windHeight} min={0} max={3} step={.05} unit=" м" onChange={setWindHeight}/>
             <div className="wind-arrows">
-              {[{id:"up",icon:"↑",label:"Вверх"},{id:"left",icon:"←",label:"Влево"},{id:"right",icon:"→",label:"Вправо"},{id:"down",icon:"↓",label:"Вниз"},{id:"toward",icon:"⊙",label:"К себе"},{id:"away",icon:"⊗",label:"От себя"}].map(d=><button key={d.id} className={`wind-direction wind-${d.id}`} aria-label={d.label} aria-pressed={engineRef.current?.isWindDirection(d.id)??false} onClick={()=>engineRef.current?.windDirection(d.id)}><span aria-hidden="true">{d.icon}</span><small>{d.label}</small></button>)}
+              {tr([{id:"up",icon:"↑",label:"Вверх"},{id:"left",icon:"←",label:"Влево"},{id:"right",icon:"→",label:"Вправо"},{id:"down",icon:"↓",label:"Вниз"},{id:"toward",icon:"⊙",label:"К себе"},{id:"away",icon:"⊗",label:"От себя"}].map(d=><button key={d.id} className={`wind-direction wind-${d.id}`} aria-label={tr(d.label)} aria-pressed={engineRef.current?.isWindDirection(d.id)??false} onClick={()=>engineRef.current?.windDirection(d.id)}><span aria-hidden="true">{tr(d.icon)}</span><small>{tr(d.label)}</small></button>))}
             </div>
-          </Section>}
-          {selected==="pins" && <Section title="Крепления">
-            {(engineRef.current?.pinGroups??[]).map((g,i)=><div className="flex items-center justify-between" key={i}>
-              <button className="lab-btn" data-selected={engineRef.current?.selectedPin===i} onClick={()=>{if(engineRef.current){engineRef.current.selectedPin=i;engineRef.current.invalidate();}refreshControls(v=>v+1);}}>Опора {i+1}</button>
-              <button className="lab-btn icon-btn" title="УДАЛИТЬ ОПОРУ" aria-label={`Удалить опору ${i+1}`} onClick={()=>engineRef.current?.removePin(i)}><Icon name="trash"/></button>
-            </div>)}
-          </Section>}
-          {(selected==="diffuse"||selected==="directional") && <Section title={selected==="diffuse"?"Рассеянный свет":"Направленный свет"}>
-            {(()=>{const light=selected==="diffuse"?diffuse:directional;const set=selected==="diffuse"?setDiffuse:setDirectional;return <>
-              <div className="flex justify-between items-center"><Toggle checked={light.on} onChange={on=>set({...light,on})} label="Свет"/><input type="color" aria-label="Цвет света" value={light.color} onChange={e=>set({...light,color:e.target.value})}/></div>
+          </Section>)}
+          {tr(selected==="pins" && <Section title="Крепления">
+            {tr((engineRef.current?.pinGroups??[]).map((g,i)=><div className="flex items-center justify-between" key={i}>
+              <button className="lab-btn" data-selected={engineRef.current?.selectedPin===i} onClick={()=>{if(engineRef.current){engineRef.current.selectedPin=i;engineRef.current.invalidate();}refreshControls(v=>v+1);}}>{tr("Опора ")}{tr(i+1)}</button>
+              <button className="lab-btn icon-btn" title={tr("УДАЛИТЬ ОПОРУ")} aria-label={tr(`Удалить опору ${i+1}`)} onClick={()=>engineRef.current?.removePin(i)}><Icon name="trash"/></button>
+            </div>))}
+          </Section>)}
+          {tr((selected==="diffuse"||selected==="directional") && <Section title={selected==="diffuse"?"Рассеянный свет":"Направленный свет"}>
+            {tr((()=>{const light=selected==="diffuse"?diffuse:directional;const set=selected==="diffuse"?setDiffuse:setDirectional;return <>
+              <div className="flex justify-between items-center"><Toggle checked={light.on} onChange={on=>set({...light,on})} label="Свет"/><input type="color" aria-label={tr("Цвет света")} value={light.color} onChange={e=>set({...light,color:e.target.value})}/></div>
               <Slider label="Яркость" value={light.intensity} min={0} max={6} step={.1} digits={1} onChange={intensity=>set({...light,intensity})}/>
-              {(["x","y","z"] as const).map(axis=><Slider key={axis} label={axis} value={light[axis]} min={axis==="y"?0:-5} max={axis==="y"?6:5} step={.05} onChange={v=>set({...light,[axis]:v})}/>)}
-            </>;})()}
-          </Section>}
-          <div className="px-3 py-2 border-b border-border"><label className="lab-label" htmlFor="garment-preset">Форма</label><select id="garment-preset" className="w-full mt-1 rounded border border-border bg-card px-2 py-2 text-sm" value={preset} onChange={e=>choosePreset(e.target.value as PresetId)}>{PRESETS.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></div>
+              {tr((["x","y","z"] as const).map(axis=><Slider key={axis} label={axis} value={light[axis]} min={axis==="y"?0:-5} max={axis==="y"?6:5} step={.05} onChange={v=>set({...light,[axis]:v})}/>))}
+            </>;})())}
+          </Section>)}
+          <div className="px-3 py-2 border-b border-border"><label className="lab-label" htmlFor="garment-preset">{tr("Форма")}</label><select id="garment-preset" className="w-full mt-1 rounded border border-border bg-card px-2 py-2 text-sm" value={preset} onChange={e=>choosePreset(e.target.value as PresetId)}>{tr(PRESETS.map(p=><option key={p.id} value={p.id}>{tr(p.label)}</option>))}</select></div>
 
-          {preset==="skirt"&&<Section title="Юбка">
+          {tr(preset==="skirt"&&<Section title="Юбка">
             <Seg options={[{id:"pencil",label:"Карандаш"},{id:"half",label:"Полусолнце"},{id:"pleated",label:"Плиссе"}]} value={skirt.style} onChange={style=>setSkirt({...skirt,style})}/>
             <Slider label="Длина" value={skirt.length} min={.3} max={2} step={.01} unit=" м" onChange={length=>setSkirt({...skirt,length})}/>
             <Slider label="Ширина" value={skirt.width} min={.85} max={1.8} step={.01} unit="×" onChange={width=>setSkirt({...skirt,width})}/>
-            {skirt.style==="pleated"&&<Slider label="Складки" value={skirt.folds} min={6} max={32} step={1} digits={0} onChange={folds=>setSkirt({...skirt,folds})}/>}
-          </Section>}
-          {mannequin&&<>
+            {tr(skirt.style==="pleated"&&<Slider label="Складки" value={skirt.folds} min={6} max={32} step={1} digits={0} onChange={folds=>setSkirt({...skirt,folds})}/>)}
+          </Section>)}
+          {tr(mannequin&&<>
             <Section title="Ноги">
               <LimbButtons kind="Leg" side={legSide} linked={legs.linked} onSelect={selectLeg}/>
-              {(["hip","knee","spread"] as const).map((key,i)=><Slider key={key} label={["Бедро","Колено","В сторону"][i]} value={legs[legSide][key]} min={key==="hip"?-70:0} max={key==="hip"?100:key==="knee"?135:35} step={1} unit="°" digits={0} onChange={v=>{const pose:LegPose={...legs[legSide],[key]:v};setLegs({...legs,[legSide]:pose,...(legs.linked?{left:pose,right:{...pose}}:{})});}}/>)}
-              {(["x","y","z"] as const).map(axis=><Slider key={axis} label={`Таз · ${axis}`} value={legs[axis]} min={axis==="y"?.4:-3} max={3.5} step={.01} unit=" м" onChange={v=>setLegs({...legs,[axis]:v})}/>)}
+              {tr((["hip","knee","spread"] as const).map((key,i)=><Slider key={key} label={["Бедро","Колено","В сторону"][i]} value={legs[legSide][key]} min={key==="hip"?-70:0} max={key==="hip"?100:key==="knee"?135:35} step={1} unit="°" digits={0} onChange={v=>{const pose:LegPose={...legs[legSide],[key]:v};setLegs({...legs,[legSide]:pose,...(legs.linked?{left:pose,right:{...pose}}:{})});}}/>))}
+              {tr((["x","y","z"] as const).map(axis=><Slider key={axis} label={`Таз · ${axis}`} value={legs[axis]} min={axis==="y"?.4:-3} max={3.5} step={.01} unit=" м" onChange={v=>setLegs({...legs,[axis]:v})}/>))}
             </Section>
-            {preset==="pants"&&<Section title="Брюки">
+            {tr(preset==="pants"&&<Section title="Брюки">
               <Slider label="Длина" value={legs.length} min={.5} max={1.85} step={.01} unit=" м" onChange={length=>setLegs({...legs,length})}/>
               <Slider label="Свобода облегания" value={legs.ease} min={.015} max={.22} step={.01} unit=" м" onChange={ease=>setLegs({...legs,ease})}/>
-            </Section>}
-          </>}
-          {mannequin&&body.on&&<>
+            </Section>)}
+          </>)}
+          {tr(mannequin&&body.on&&<>
             <Section title="Туловище">
-              {(["torsoPitch","torsoLean","headPitch","headLean"] as const).map((key,i)=><Slider key={key} label={["Туловище · вперёд","Туловище · в сторону","Голова · вперёд","Голова · в сторону"][i]} value={body[key]} min={i%2?-35:-45} max={i%2?35:55} step={1} unit="°" digits={0} onChange={v=>setBody({...body,[key]:v})}/>)}
+              {tr((["torsoPitch","torsoLean","headPitch","headLean"] as const).map((key,i)=><Slider key={key} label={["Туловище · вперёд","Туловище · в сторону","Голова · вперёд","Голова · в сторону"][i]} value={body[key]} min={i%2?-35:-45} max={i%2?35:55} step={1} unit="°" digits={0} onChange={v=>setBody({...body,[key]:v})}/>))}
             </Section>
             <Section title="Одежда туловища">
-              <div className="grid grid-cols-3 gap-1">{([{key:"tunic",label:"Кофта"},{key:"sleeves",label:"Рукава"},{key:"cape",label:"Плащ"}] as const).map(item=><button className="lab-btn" key={item.key} aria-pressed={body[item.key]} data-selected={body[item.key]} onClick={()=>setBody({...body,[item.key]:!body[item.key],...(item.key==="sleeves"&&!body.sleeves?{tunic:true,arms:true}:{})})}>{item.label}</button>)}</div>
-              {body.tunic&&<><Slider label="Длина кофты" value={body.length} min={.45} max={1.8} step={.01} unit=" м" onChange={length=>setBody({...body,length})}/><Slider label="Свобода облегания" value={body.ease} min={.025} max={.28} step={.005} unit=" м" onChange={ease=>setBody({...body,ease})}/></>}
-              {body.cape&&<><Slider label="Длина плаща" value={body.capeLength} min={.45} max={2.5} step={.01} unit=" м" onChange={capeLength=>setBody({...body,capeLength})}/><Seg options={[{id:"up",label:"Капюшон надет"},{id:"down",label:"Опущен"}]} value={body.hood} onChange={hood=>setBody({...body,hood})}/></>}
+              <div className="grid grid-cols-3 gap-1">{tr(([{key:"tunic",label:"Кофта"},{key:"sleeves",label:"Рукава"},{key:"cape",label:"Плащ"}] as const).map(item=><button className="lab-btn" key={item.key} aria-pressed={body[item.key]} data-selected={body[item.key]} onClick={()=>setBody({...body,[item.key]:!body[item.key],...(item.key==="sleeves"&&!body.sleeves?{tunic:true,arms:true}:{})})}>{tr(item.label)}</button>))}</div>
+              {tr(body.tunic&&<><Slider label="Длина кофты" value={body.length} min={.45} max={1.8} step={.01} unit=" м" onChange={length=>setBody({...body,length})}/><Slider label="Свобода облегания" value={body.ease} min={.025} max={.28} step={.005} unit=" м" onChange={ease=>setBody({...body,ease})}/></>)}
+              {tr(body.cape&&<><Slider label="Длина плаща" value={body.capeLength} min={.45} max={2.5} step={.01} unit=" м" onChange={capeLength=>setBody({...body,capeLength})}/><Seg options={[{id:"up",label:"Капюшон надет"},{id:"down",label:"Опущен"}]} value={body.hood} onChange={hood=>setBody({...body,hood})}/></>)}
             </Section>
             <Section title="Руки">
               <LimbButtons kind="BodyArm" side={armSide} linked={body.linked} onSelect={selectArm}/>
-              {(["raise","forward","elbow"] as const).map((key,i)=><Slider key={key} label={["В сторону","Вперёд","Локоть"][i]} value={body[armSide][key]} min={key==="forward"?-80:0} max={key==="elbow"?140:key==="forward"?120:100} step={1} unit="°" digits={0} onChange={v=>{const pose={...body[armSide],[key]:v};setBody({...body,[armSide]:pose,...(body.linked?{left:pose,right:{...pose}}:{})});}}/>)}
+              {tr((["raise","forward","elbow"] as const).map((key,i)=><Slider key={key} label={["В сторону","Вперёд","Локоть"][i]} value={body[armSide][key]} min={key==="forward"?-80:0} max={key==="elbow"?140:key==="forward"?120:100} step={1} unit="°" digits={0} onChange={v=>{const pose={...body[armSide],[key]:v};setBody({...body,[armSide]:pose,...(body.linked?{left:pose,right:{...pose}}:{})});}}/>))}
             </Section>
-            {preset==="body"&&<Section title="Таз">{(["x","y","z"] as const).map(axis=><Slider key={axis} label={axis} value={legs[axis]} min={axis==="y"?.4:-3} max={3.5} step={.01} onChange={v=>setLegs({...legs,[axis]:v})}/>)}</Section>}
-          </>}
-          {def.rect && <Section title="Крепление">
+            {tr(preset==="body"&&<Section title="Таз">{tr((["x","y","z"] as const).map(axis=><Slider key={axis} label={axis} value={legs[axis]} min={axis==="y"?.4:-3} max={3.5} step={.01} onChange={v=>setLegs({...legs,[axis]:v})}/>))}</Section>)}
+          </>)}
+          {tr(def.rect && <Section title="Крепление">
             <Seg options={(Object.keys(PIN_LABELS) as PinMode[]).map((id) => ({ id, label: PIN_LABELS[id] }))} value={pin} onChange={setPin} />
-          </Section>}
-          {preset==="sleeve" && <Section title="Плечо">
-            {(["X","Y","Z"] as const).map(axis=>{const key=`shoulder${axis}` as "shoulderX"|"shoulderY"|"shoulderZ";return <Slider key={axis} label={axis} value={sleeve[key]??(axis==="X"?-.85:axis==="Y"?1.65:0)} min={axis==="Y"?.5:-3} max={3.5} step={.01} onChange={v=>setSleeve({...sleeve,[key]:v})}/>;})}
+          </Section>)}
+          {tr(preset==="sleeve" && <Section title="Плечо">
+            {tr((["X","Y","Z"] as const).map(axis=>{const key=`shoulder${axis}` as "shoulderX"|"shoulderY"|"shoulderZ";return <Slider key={axis} label={axis} value={sleeve[key]??(axis==="X"?-.85:axis==="Y"?1.65:0)} min={axis==="Y"?.5:-3} max={3.5} step={.01} onChange={v=>setSleeve({...sleeve,[key]:v})}/>;}))}
             <Slider label="Подъём плеча" value={sleeve.shoulderPitch??0} min={-80} max={80} step={1} unit="°" digits={0} onChange={shoulderPitch=>setSleeve({...sleeve,shoulderPitch})}/>
             <Slider label="Разворот плеча" value={sleeve.shoulderYaw??0} min={-180} max={180} step={1} unit="°" digits={0} onChange={shoulderYaw=>setSleeve({...sleeve,shoulderYaw})}/>
-          </Section>}
-          {preset==="sleeve" && <Section title="Рукав">
+          </Section>)}
+          {tr(preset==="sleeve" && <Section title="Рукав">
             <Slider label="Длина" value={sleeve.length} min={.5} max={2.1} step={.01} unit=" м" onChange={length=>setSleeve({...sleeve,length})}/>
             <Slider label="Свобода облегания" value={sleeve.ease} min={.04} max={.35} step={.01} unit=" м" onChange={ease=>setSleeve({...sleeve,ease})}/>
             <Slider label="Локоть" value={sleeve.angle} min={-65} max={140} step={1} digits={0} unit="°" onChange={angle=>setSleeve({...sleeve,angle})}/>
-          </Section>}
-          {(selected==="sphere"||selected==="box") && <Section title="Перемещение">
+          </Section>)}
+          {tr((selected==="sphere"||selected==="box") && <Section title="Перемещение">
             <Seg options={[{id:"view",label:"По экрану"},{id:"floor",label:"По полу"}]} value={dragPlane} onChange={setDragPlane}/>
-          </Section>}
+          </Section>)}
 
           <Section title="Материал">
             <Seg options={(Object.keys(MATERIALS) as MaterialId[]).map((id) => ({ id, label: MATERIALS[id].label }))} value={material} onChange={setMaterial} />
             <div className="flex items-center gap-1.5 pt-1">
-              {SWATCHES.map((c) => (
-                <button key={c} type="button" aria-label={`Цвет ${c}`} className="lab-swatch" data-active={color === c} style={{ background: c }} onClick={() => setColor(c)} />
-              ))}
-              <input type="color" aria-label="Свой цвет" value={color} onChange={(e) => setColor(e.target.value)} className="lab-color ml-auto" />
+              {tr(SWATCHES.map((c) => (
+                <button key={c} type="button" aria-label={tr(`Цвет ${c}`)} className="lab-swatch" data-active={color === c} style={{ background: c }} onClick={() => setColor(c)} />
+              )))}
+              <input type="color" aria-label={tr("Свой цвет")} value={color} onChange={(e) => setColor(e.target.value)} className="lab-color ml-auto" />
             </div>
             <div className="flex items-center justify-between text-[12.5px]">
-              <span className="text-foreground/80">Каркас</span>
+              <span className="text-foreground/80">{tr("Каркас")}</span>
               <Toggle checked={wireframe} onChange={setWireframe} label="Каркас" />
             </div>
           </Section>
 
           <Section title="Физика">
-            <div className="flex items-center justify-between text-[12.5px]"><span>Самоколлизия</span><Toggle checked={selfCollision} onChange={setSelfCollision} label="Самоколлизия" /></div>
-            <div className="flex items-center justify-between"><span>Ветер</span><Toggle checked={windEnabled} onChange={setWindEnabled} label="Ветер"/></div>
+            <div className="flex items-center justify-between text-[12.5px]"><span>{tr("Самоколлизия")}</span><Toggle checked={selfCollision} onChange={setSelfCollision} label="Самоколлизия" /></div>
+            <div className="flex items-center justify-between"><span>{tr("Ветер")}</span><Toggle checked={windEnabled} onChange={setWindEnabled} label="Ветер"/></div>
             <Slider label="Скорость ветра" value={wind} min={0} max={20} step={0.1} unit=" м/с" digits={1} onChange={setWind} />
             <Slider label="Азимут" value={windAngle} min={-180} max={180} step={1} unit="°" digits={0} onChange={setWindAngle} />
             <Slider label="Наклон ветра" value={windElevation} min={-90} max={90} step={1} unit="°" digits={0} onChange={setWindElevation} />
