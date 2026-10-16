@@ -28,7 +28,7 @@ export class RotationTool {
         if (this.dragging)
             return;
         const e = this.engine, k = e.settings.selected;
-        if (k!=='sphere' && (!this.enabled || !['cloth', 'box'].includes(k))) {
+        if (!['cloth','sphere','box'].includes(k)||(k==='cloth'&&!e.sim)) {
             this.control.detach();
             this.attached = '';
             return;
@@ -36,7 +36,7 @@ export class RotationTool {
         if (k === this.attached && k === 'cloth')
             return;
         this.attached = k;
-        this.control.setMode(k==='sphere'?'translate':'rotate');
+        this.control.setMode(k==='sphere'||!this.enabled?'translate':'rotate');
         this.proxy.rotation.set(0, 0, 0);
         if (k === 'cloth' && e.sim) {
             const bounds = new T.Box3();
@@ -72,7 +72,7 @@ export class RotationTool {
         }
         else if(k==='sphere')e.change({sphere:{...e.settings.sphere,x:this.proxy.position.x,y:this.proxy.position.y,z:this.proxy.position.z}});
         else if (k === 'box')
-            e.change({ [k]: { ...e.settings[k], rotation: [this.proxy.rotation.x, this.proxy.rotation.y, this.proxy.rotation.z] } });
+            e.change({box:{...e.settings.box,...(this.enabled?{rotation:[this.proxy.rotation.x,this.proxy.rotation.y,this.proxy.rotation.z] as [number,number,number]}:{x:this.proxy.position.x,y:this.proxy.position.y,z:this.proxy.position.z})}});
         e.invalidate();
     }
     dispose() { this.control.dispose(); this.engine.scene.remove(this.proxy, this.control.getHelper()); }

@@ -612,6 +612,7 @@ export class ClothEngine {
     this.acc = 0;
     this.rebuildPinGroups();
     this.syncGeometry();
+    this.rotationTool?.setEnabled(false);
   }
 
   refreshPinText(){this.pinLabels.forEach((el,i)=>{el.title=translate(`ОПОРА ${i+1} · ДВОЙНОЕ НАЖАТИЕ: УДАЛИТЬ`);el.setAttribute("aria-label",translate(`Опора ${i+1}`));});}
@@ -785,7 +786,7 @@ export class ClothEngine {
 
   private onDown = (e:PointerEvent) => this.pointerDown(e);
   pointerDown(e:PointerEvent) {
-    if(this.rotationTool?.control.object)return;
+    if(this.rotationTool?.control.object&&this.rotationTool.control.axis)return;
     if(e.button!==0 || e.shiftKey || e.ctrlKey || e.metaKey || !this.sim || this.dragId!==null)return;
     this.setNdc(e);
     const pg=this.pickPin(e);

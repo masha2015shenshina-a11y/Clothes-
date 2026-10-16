@@ -340,7 +340,10 @@ export class ClothSim {
           let d = Math.sqrt(d2);
           if (d < 1e-6) { dx = 0; dy = 1; dz = 0; d = 1; }
           const nx = dx / d, ny = dy / d, nz = dz / d;
+          const ox=x[o],oy=x[o+1],oz=x[o+2];
           x[o] = S.x + nx * R; x[o + 1] = S.y + ny * R; x[o + 2] = S.z + nz * R;
+          p[o]+=x[o]-ox;p[o+1]+=x[o+1]-oy;p[o+2]+=x[o+2]-oz;
+          this.supportFriction(o,nx,ny,nz,R-d);
           this.friction(o, nx, ny, nz, keep);
         }
       }
@@ -355,7 +358,7 @@ export class ClothSim {
         const t=Math.max(0,Math.min(1,((x[o]-ax)*vx+(x[o+1]-ay)*vy+(x[o+2]-az)*vz)/Math.max(1e-16,vx*vx+vy*vy+vz*vz)));
         const qx=ax+t*vx,qy=ay+t*vy,qz=az+t*vz;
         let dx=x[o]-qx,dy=x[o+1]-qy,dz=x[o+2]-qz,l=Math.hypot(dx,dy,dz);const r=C.r+th+clearance;
-        if(l<r||hit<1){if(l<1e-8){dx=0;dy=0;dz=1;l=1;}dx/=l;dy/=l;dz/=l;x[o]=qx+dx*r;x[o+1]=qy+dy*r;x[o+2]=qz+dz*r;p[o]+=x[o]-oldX;p[o+1]+=x[o+1]-oldY;p[o+2]+=x[o+2]-oldZ;this.friction(o,dx,dy,dz,keep);}
+        if(l<r||hit<1){if(l<1e-8){dx=0;dy=0;dz=1;l=1;}dx/=l;dy/=l;dz/=l;x[o]=qx+dx*r;x[o+1]=qy+dy*r;x[o+2]=qz+dz*r;p[o]+=x[o]-oldX;p[o+1]+=x[o+1]-oldY;p[o+2]+=x[o+2]-oldZ;if(C.a[0]===C.b[0]&&C.a[1]===C.b[1]&&C.a[2]===C.b[2])this.supportFriction(o,dx,dy,dz,Math.max(0,r-l));this.friction(o,dx,dy,dz,keep);}
       }
       for(const E of P.ellipsoids??[]){
         if(E.enabled===false)continue;
@@ -379,10 +382,24 @@ export class ClothSim {
           let nx=0,ny=0,nz=0,depth=0;
           if(px<py&&px<pz){nx=Math.sign(lx||1);depth=px;}else if(py<pz){ny=Math.sign(ly||1);depth=py;}else{nz=Math.sign(lz||1);depth=pz;}
           const dx=basis?nx*basis[0]+ny*basis[3]+nz*basis[6]:nx,dy=basis?nx*basis[1]+ny*basis[4]+nz*basis[7]:ny,dz=basis?nx*basis[2]+ny*basis[5]+nz*basis[8]:nz;
-          x[o]+=dx*depth;x[o+1]+=dy*depth;x[o+2]+=dz*depth;p[o]+=dx*depth;p[o+1]+=dy*depth;p[o+2]+=dz*depth;this.friction(o,dx,dy,dz,keep);
+          x[o]+=dx*depth;x[o+1]+=dy*depth;x[o+2]+=dz*depth;p[o]+=dx*depth;p[o+1]+=dy*depth;p[o+2]+=dz*depth;this.supportFriction(o,dx,dy,dz,depth);this.friction(o,dx,dy,dz,keep);
         }
       }
     }
+  }
+
+  /** Position-level static friction prevents constraint corrections creeping across a support.
+   * The threshold scales with the contact load; steep faces and real pulls still slip. */
+  private supportFriction(o:number,nx:number,ny:number,nz:number,depth:number){
+    const mu=this.params.friction;if(ny<=.2||mu<=0)return;
+    const dx=this.x[o]-this.contactStart[o],dy=this.x[o+1]-this.contactStart[o+1],dz=this.x[o+2]-this.contactStart[o+2];
+    const dot=dx*nx+dy*ny+dz*nz,tx=dx-dot*nx,ty=dy-dot*ny,tz=dz-dot*nz;
+    const distance=Math.hypot(tx,ty,tz),load=Math.max(0,depth)+this.params.gravity*this.lastH*this.lastH*ny;
+    const staticLimit=mu*2.5*load+.00003*mu;
+    if(distance>staticLimit||distance<1e-12)return;
+    this.x[o]-=tx;this.x[o+1]-=ty;this.x[o+2]-=tz;
+    const vx=this.x[o]-this.p[o],vy=this.x[o+1]-this.p[o+1],vz=this.x[o+2]-this.p[o+2],vn=Math.max(0,vx*nx+vy*ny+vz*nz);
+    this.p[o]=this.x[o]-vn*nx;this.p[o+1]=this.x[o+1]-vn*ny;this.p[o+2]=this.x[o+2]-vn*nz;
   }
 
   private friction(o: number, nx: number, ny: number, nz: number, keep: number) {
