@@ -43,6 +43,11 @@ export class BoxContacts {
             const a = tris[f] * 3, b = tris[f + 1] * 3, c = tris[f + 2] * 3;
             if (!w[a / 3] && !w[b / 3] && !w[c / 3])
                 continue;
+            if(!B.basis && (
+                Math.min(x[a+1],x[b+1],x[c+1])>=B.y+this.hy || Math.max(x[a+1],x[b+1],x[c+1])<=B.y-this.hy ||
+                Math.min(x[a],x[b],x[c])>=B.x+this.hx || Math.max(x[a],x[b],x[c])<=B.x-this.hx ||
+                Math.min(x[a+2],x[b+2],x[c+2])>=B.z+this.hz || Math.max(x[a+2],x[b+2],x[c+2])<=B.z-this.hz
+            ))continue;
             for (let j = 0; j < 3; j++) {
                 const o = j === 0 ? a : j === 1 ? b : c;
                 const basis=B.basis,dx=x[o]-B.x,dy=x[o+1]-B.y,dz=x[o+2]-B.z;

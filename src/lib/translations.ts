@@ -1,4 +1,21 @@
 export const EN: Record<string, string> = Object.fromEntries(`
+Утяжка кольца|Band tension
+Положение кольца|Band position
+Количество|Quantity
+В группу|Group selection
+Укажите место на манекене|Pick a point on the mannequin
+Нажмите на ткань|Pick a point on the cloth
+Закрепить на манекене|Pin to mannequin
+Закрепить в пространстве|Pin in place
+Плечевое кольцо|Shoulder opening
+Манжета|Cuff
+Высота пояса|Waistband height
+Обхват пояса|Waistband circumference
+Воздушный поток|Airflow
+Левая стопа|Left foot
+Правая стопа|Right foot
+Левая кисть|Left hand
+Правая кисть|Right hand
 2D-контур|2D outline
 Готово|Done
 Обычный|Normal

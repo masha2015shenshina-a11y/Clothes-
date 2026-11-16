@@ -1,4 +1,5 @@
 import {ContourView} from './contour';
+import {downloadFrame,carryContact} from './studioTools';
 import * as T from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
@@ -8,8 +9,8 @@ import { FramePacer } from './pacing';
 import { DEFAULT_SHEET, type SheetSettings, type PinMode, MATERIALS, DEFAULT_LEGS, DEFAULT_SKIRT, DEFAULT_SLEEVE, legPoints, LEG_RADIUS, type MaterialId, type PresetId, type ClothBuild, type LegsSettings } from './presets';
 import { DEFAULT_BODY, bodyEllipsoids, bodyArmPoints, upperTransform, type BodySettings, type Side } from './mannequin';
 import { mannequinGeometries, limbGeometry } from './mannequinGeometry';
-export type Part = 'root' | 'torso' | 'head' | 'leftArm' | 'rightArm' | 'leftElbow' | 'rightElbow' | 'leftLeg' | 'rightLeg' | 'leftKnee' | 'rightKnee';
-export const PARTS: Record<Part, string> = { root: 'Весь манекен', torso: 'Туловище', head: 'Голова', leftArm: 'Левое плечо', rightArm: 'Правое плечо', leftElbow: 'Левый локоть', rightElbow: 'Правый локоть', leftLeg: 'Левое бедро', rightLeg: 'Правое бедро', leftKnee: 'Левое колено', rightKnee: 'Правое колено' };
+export type Part = 'root' | 'torso' | 'head' | 'leftArm' | 'rightArm' | 'leftElbow' | 'rightElbow' | 'leftLeg' | 'rightLeg' | 'leftKnee' | 'rightKnee' | 'leftFoot' | 'rightFoot' | 'leftHand' | 'rightHand';
+export const PARTS: Record<Part, string> = { leftFoot:'Левая стопа',rightFoot:'Правая стопа',leftHand:'Левая кисть',rightHand:'Правая кисть', root: 'Весь манекен', torso: 'Туловище', head: 'Голова', leftArm: 'Левое плечо', rightArm: 'Правое плечо', leftElbow: 'Левый локоть', rightElbow: 'Правый локоть', leftLeg: 'Левое бедро', rightLeg: 'Правое бедро', leftKnee: 'Левое колено', rightKnee: 'Правое колено' };
 export interface ItemInfo {
     id: number;
     name: string;
@@ -55,6 +56,29 @@ export class CompositionWorkspace {
     readonly gizmo: TransformControls;
     private proxy = new T.Object3D();
     private lastMatrix = new T.Matrix4();
+    groupIds=new Set<number>();
+    private bindings=new Map<ClothItem,Map<number,{mesh:T.Object3D,local:T.Vector3}>>();
+    pinTool:'world'|'body'|null=null;
+    private pendingPin:number|null=null;
+    onPinStep?:(next:boolean)=>void;
+    setPinTool(tool:'world'|'body'|null){
+        this.pinTool=tool;this.pendingPin=null;this.onPinStep?.(false);
+        this.setMode(null);
+    }
+    private syncBindings(){
+        for(const [cloth,pins] of this.bindings??[]){
+            for(const [index,pin] of pins){
+                const world=pin.mesh.localToWorld(pin.local.clone());
+                world.toArray(cloth.sim.x,index*3);world.toArray(cloth.sim.p,index*3);
+            }
+            cloth.sim.normalsDirty=true;this.syncCloth(cloth);
+        }
+    }
+    snapshot(){
+        if(this.contour)(this.contourView??=new ContourView()).render(this.renderer,this.scene,this.camera);
+        else this.renderer.render(this.scene,this.camera);
+        downloadFrame(this.renderer.domElement);
+    }
     private items: Item[] = [];
     private sequence = 0;
     selected = 0;
@@ -110,12 +134,12 @@ export class CompositionWorkspace {
         this.orbit.addEventListener('change', this.invalidate);
         this.scene.add(this.ambientLight,this.keyLight);this.keyLight.position.set(3,6,4);
         const floor = new T.Mesh(new T.PlaneGeometry(40, 40), new T.MeshStandardMaterial({ color: '#ded9cf', roughness: 1 }));
-        floor.rotation.x = -Math.PI / 2;
+        floor.userData.skipInk=true;floor.rotation.x = -Math.PI / 2;
         floor.position.y = -.015;
         this.scene.add(floor, new T.GridHelper(16, 32, '#b8afa0', '#d1c9bb'));
         this.gizmo = new TransformControls(this.camera, this.renderer.domElement);
         this.gizmo.setSize(.85);
-        this.scene.add(this.gizmo.getHelper(), this.proxy);
+        this.gizmo.getHelper().userData.skipInk=true;this.scene.add(this.gizmo.getHelper(), this.proxy);
         this.gizmo.addEventListener('dragging-changed', e => { this.dragging = !!e.value; this.orbit.enabled = !this.dragging; if (!this.dragging) {
             this.attach();
             this.emit();
@@ -176,7 +200,7 @@ export class CompositionWorkspace {
         const mesh=new T.Mesh(kind==='box'?new T.BoxGeometry(1,1,1):new T.SphereGeometry(.5,24,16),new T.MeshStandardMaterial({color:'#938b7d',roughness:.7}));
         const id=++this.sequence;
         const item:SolidItem={id,name:`${kind==='box'?'Куб':'Шар'} ${id}`,kind,mesh,dimensions:[1,1,1]};
-        mesh.position.set(0,.5,0);mesh.userData.item=id;
+        mesh.position.set(this.items.filter(i=>i.kind==="box"||i.kind==="sphere").length*1.12,.5,0);mesh.userData.item=id;
         this.items.push(item);this.scene.add(mesh);this.refreshColliders();this.select(id);this.invalidate();
     }
     setDimensions(values: [number,number,number]) {
@@ -204,8 +228,12 @@ export class CompositionWorkspace {
             add(limbGeometry(1, .12, true), `${side}Knee`);
         }
         for (const side of ['left', 'right'] as const) {
-            add(geometries.hand.clone(), `${side}Elbow`);
-            add(geometries.foot.clone(), `${side}Knee`);
+            add(geometries.hand.clone(), `${side}Hand`);
+            add(geometries.foot.clone(), `${side}Foot`);
+        }
+        for(const side of ['left','right'] as const)for(const part of ['Elbow','Knee'] as const){
+            add(geometries.joint.clone(),side+part as Part);
+            item.meshes.at(-1)!.scale.setScalar(part==='Knee'?.105:.083);
         }
         geometries.joint.dispose();
         geometries.hand.dispose();
@@ -231,6 +259,7 @@ export class CompositionWorkspace {
         const segment = (mesh: T.Mesh, a: number[], b: number[]) => { const A = new T.Vector3(...a), B = new T.Vector3(...b); mesh.position.copy(A).add(B).multiplyScalar(.5); mesh.scale.set(1, A.distanceTo(B), 1); mesh.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), B.sub(A).normalize()); };
         for (let s = 0; s < 2; s++) {
             const side = s ? 'right' : 'left', arm = bodyArmPoints(item.root, item.body, side), leg = legPoints(item.root, side);
+            item.meshes[17+s*2].position.fromArray(arm[1]);item.meshes[18+s*2].position.fromArray(leg[1]);
             segment(item.meshes[5 + s * 4], arm[0], arm[1]);
             segment(item.meshes[6 + s * 4], arm[1], arm[2]);
             segment(item.meshes[7 + s * 4], leg[0], leg[1]);
@@ -238,7 +267,10 @@ export class CompositionWorkspace {
             const hand = item.meshes[13 + s * 2], foot = item.meshes[14 + s * 2], armDirection = new T.Vector3(...arm[2]).sub(new T.Vector3(...arm[1])).normalize();
             hand.position.fromArray(arm[2]).addScaledVector(armDirection, .12);
             hand.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), armDirection);
-            foot.position.fromArray(leg[2]).add(new T.Vector3(0, -.07, .07));foot.quaternion.identity();
+            const footQ=foot.userData.pose??new T.Quaternion();
+            foot.position.fromArray(leg[2]).add(new T.Vector3(0,-.07,.07).applyQuaternion(footQ));
+            foot.quaternion.copy(footQ);
+            if(hand.userData.pose){hand.position.fromArray(arm[2]).addScaledVector(armDirection.applyQuaternion(hand.userData.pose),.12);hand.quaternion.premultiply(hand.userData.pose);}
         }
         if(item.orientation)for(const mesh of item.meshes){mesh.position.copy(this.worldPoint(item,mesh.position.toArray()));mesh.quaternion.premultiply(item.orientation);}
     }
@@ -256,13 +288,19 @@ export class CompositionWorkspace {
             if(i.kind==='sphere'){const p=i.mesh.position,r=i.dimensions[0]/2;capsules.push({a:p.toArray(),b:p.toArray(),r});}
             if(i.kind==='box'){const p=i.mesh.position,q=i.mesh.quaternion;boxes.push({on:true,x:p.x,y:p.y,z:p.z,s:1,width:i.dimensions[0],height:i.dimensions[1],depth:i.dimensions[2],basis:[new T.Vector3(1,0,0),new T.Vector3(0,1,0),new T.Vector3(0,0,1)].flatMap(v=>v.applyQuaternion(q).toArray())});}
         }
+        for(const i of this.items)if(i.kind==='body')for(let s=0;s<2;s++)for(const foot of [false,true]){
+            const m=i.meshes?.[13+2*s+Number(foot)];if(!m)continue;
+            const axis=new T.Vector3(0,foot?0:1,foot?1:0).applyQuaternion(m.quaternion);
+            capsules.push({a:m.position.clone().addScaledVector(axis,foot?-.09:-.08).toArray(),b:m.position.clone().addScaledVector(axis,foot?.12:.08).toArray(),r:foot?.08:.06});
+        }
         this.colliders = { capsules, ellipsoids, boxes };
         for (const i of this.items)
             if (i.kind === 'cloth')
                 Object.assign(i.sim.params, this.colliders);
     }
-    select(id: number, part: Part = 'root') { this.selected = id; this.part = part; this.attach(); this.emit(); this.invalidate(); }
-    setMode(mode: 'translate' | 'rotate' | null) { this.mode = mode;if(mode===null){this.dragging=false;this.gizmo.dragging=false;this.orbit.enabled=true;} this.accumulator=0;this.last=0;this.attach();this.emit();this.invalidate(); }
+    select(id: number, part: Part = 'root') { this.pinTool=null;this.pendingPin=null;this.onPinStep?.(false);
+        this.selected = id; this.part = part;if(part!=='root')this.mode='rotate'; this.attach(); this.emit(); this.invalidate(); }
+    setMode(mode: 'translate' | 'rotate' | null) { if(mode){this.pinTool=null;this.pendingPin=null;this.onPinStep?.(false);}this.mode = mode;if(mode===null){this.dragging=false;this.gizmo.dragging=false;this.orbit.enabled=true;} this.accumulator=0;this.last=0;this.attach();this.emit();this.invalidate(); }
     private attach() {
         const item = this.items.find(i => i.id === this.selected);
         if (!item || this.mode===null) {
@@ -282,7 +320,12 @@ export class CompositionWorkspace {
             const r = item.root, b = item.body, part = this.part, side: Side = part.startsWith('left') ? 'left' : 'right';
             let position: number[] = [r.x, r.y, r.z];
             this.gizmo.setMode(part === 'root' ? this.mode : 'rotate');
-            if (part === 'torso') {
+            if(part.endsWith('Foot')||part.endsWith('Hand')){
+                const foot=part.endsWith('Foot'),mesh=item.meshes[13+(side==='right'?2:0)+Number(foot)];
+                position=(foot?legPoints(r,side):bodyArmPoints(r,b,side))[2];
+                this.proxy.quaternion.copy(mesh.userData.pose??new T.Quaternion());
+            }
+            else if (part === 'torso') {
                 this.proxy.rotation.set(rad(b.torsoPitch), 0, rad(-b.torsoLean));
             }
             else if (part === 'head') {
@@ -301,7 +344,7 @@ export class CompositionWorkspace {
             if(item.orientation)this.proxy.quaternion.premultiply(item.orientation);
             if(part!=='root')this.gizmo.setSpace('local');
             if (part !== 'root') {
-                this.gizmo.showY = false;
+                this.gizmo.showY = part.endsWith('Foot')||part.endsWith('Hand');
                 this.gizmo.showZ = !part.includes('Elbow') && !part.includes('Knee');
             }
         }
@@ -322,6 +365,25 @@ export class CompositionWorkspace {
         const item = this.items.find(i => i.id === this.selected);
         if (!item)
             return;
+        this.proxy.updateMatrixWorld();
+        const batch=this.part==='root'&&this.groupIds?.has(item.id)&&this.groupIds.size>1;
+        if(batch){
+            const delta=this.proxy.matrixWorld.clone().multiply(this.lastMatrix.clone().invert());
+            const rotation=new T.Quaternion().setFromRotationMatrix(delta),v=new T.Vector3();
+            for(const other of this.items){
+                if(other===item||!this.groupIds.has(other.id))continue;
+                if(other.kind==='body'){
+                    v.set(other.root.x,other.root.y,other.root.z).applyMatrix4(delta);
+                    Object.assign(other.root,{x:v.x,y:v.y,z:v.z});
+                    other.orientation=(other.orientation??new T.Quaternion()).premultiply(rotation);
+                    this.updateBody(other);
+                }else if(other.kind==='cloth'){
+                    other.anchor.position.applyMatrix4(delta);other.anchor.quaternion.premultiply(rotation);
+                    for(const buf of [other.sim.x,other.sim.p])for(let o=0;o<buf.length;o+=3)v.fromArray(buf,o).applyMatrix4(delta).toArray(buf,o);
+                    other.sim.normalsDirty=true;this.syncCloth(other);
+                }else{other.mesh.position.applyMatrix4(delta);other.mesh.quaternion.premultiply(rotation);}
+            }
+        }
         if (item.kind === 'cloth') {
             this.proxy.updateMatrixWorld();
             const delta = new T.Matrix4().copy(this.lastMatrix).invert().premultiply(this.proxy.matrixWorld), v = new T.Vector3();
@@ -336,7 +398,13 @@ export class CompositionWorkspace {
             item.sim.syncColliderHistory();
             this.syncCloth(item);
         }
-        else if(item.kind==='box'||item.kind==='sphere'){item.mesh.position.copy(this.proxy.position);item.mesh.quaternion.copy(this.proxy.quaternion);this.refreshColliders();}
+        else if(item.kind==='box'||item.kind==='sphere'){
+            if(item.kind==='box'){
+                const p=item.mesh.position,d=this.proxy.position.clone().sub(p);
+                const axes=[new T.Vector3(1,0,0),new T.Vector3(0,1,0),new T.Vector3(0,0,1)].flatMap(v=>v.applyQuaternion(item.mesh.quaternion).toArray());
+                for(const cloth of this.items)if(cloth.kind==='cloth'&&!(batch&&this.groupIds.has(cloth.id))){carryContact(cloth.sim,{on:true,s:1,x:p.x,y:p.y,z:p.z,width:item.dimensions[0],height:item.dimensions[1],depth:item.dimensions[2],basis:axes},d.x,d.y,d.z);this.syncCloth(cloth);}
+            }
+            item.mesh.position.copy(this.proxy.position);item.mesh.quaternion.copy(this.proxy.quaternion);this.refreshColliders();}
         else if(item.kind==='body') {
             const localRotation=new T.Euler().setFromQuaternion((item.orientation??new T.Quaternion()).clone().invert().multiply(this.proxy.quaternion));
             const b = item.body, r = item.root, p = this.part, side: Side = p.startsWith('left') ? 'left' : 'right', x = deg(localRotation.x), z = deg(localRotation.z), clamp = T.MathUtils.clamp;
@@ -345,6 +413,9 @@ export class CompositionWorkspace {
                 r.x = this.proxy.position.x;
                 r.y = clamp(this.proxy.position.y, .7, 4);
                 r.z = this.proxy.position.z;
+            }
+            else if(p.endsWith('Foot')||p.endsWith('Hand')){
+                item.meshes[13+(side==='right'?2:0)+Number(p.endsWith('Foot'))].userData.pose=new T.Quaternion().setFromEuler(localRotation);
             }
             else if (p === 'torso') {
                 b.torsoPitch = clamp(x, -60, 80);
@@ -367,8 +438,11 @@ export class CompositionWorkspace {
                 r[side].spread = clamp(z, -20, 75);
             }
             this.updateBody(item);
-            this.refreshColliders();
+            this.syncBindings();this.refreshColliders();
         }
+        if(batch)this.lastMatrix.copy(this.proxy.matrixWorld);
+        if(batch)this.refreshColliders();
+        if(batch||item.kind==='cloth')this.syncBindings();
         this.invalidate();
     }
     setDrapeMode(mode:'normal'|'exaggerated'){const i=this.items.find(i=>i.id===this.selected);if(i?.kind!=='cloth')return;i.sim.params.drapeMode=mode;this.emit();this.invalidate();}
@@ -376,11 +450,16 @@ export class CompositionWorkspace {
         return; i.material = material; if (color)
         i.color = color; Object.assign(i.sim.params, MATERIALS[material], { stretch: 0 }); i.mesh.material.color.set(i.color); i.mesh.material.roughness = MATERIALS[material].roughness; this.emit(); this.invalidate(); }
     release() { const i = this.items.find(i => i.id === this.selected); if (i?.kind === 'cloth') {
-        i.sim.releasePins();
+        this.setPinTool(null);this.bindings.delete(i);i.sim.releasePins();
         this.invalidate();
     } }
     remove() { const k = this.items.findIndex(i => i.id === this.selected); if (k < 0)
-        return; this.gizmo.detach(); const i = this.items.splice(k, 1)[0], object = i.kind === 'body' ? i.group : i.mesh; this.scene.remove(object); object.traverse(o => { if (o instanceof T.Mesh) {
+        return; this.gizmo.detach(); const i = this.items.splice(k, 1)[0], object = i.kind === 'body' ? i.group : i.mesh; this.scene.remove(object);
+        if(i.kind==='cloth')this.bindings?.delete(i);
+        if(i.kind==='body')for(const [cloth,pins] of this.bindings??[])for(const [index,pin] of pins)if(pin.mesh.parent===object){
+            pins.delete(index);cloth.sim.w[index]=cloth.sim.baseW[index]=1;
+        }
+        object.traverse(o => { if (o instanceof T.Mesh) {
         o.geometry.dispose();
         for (const m of Array.isArray(o.material) ? o.material : [o.material])
             m.dispose();
@@ -427,10 +506,31 @@ export class CompositionWorkspace {
         pos.setXYZ(j, i.sim.x[o], i.sim.x[o + 1], i.sim.x[o + 2]);
         normal.setXYZ(j, i.sim.nrm[o], i.sim.nrm[o + 1], i.sim.nrm[o + 2]);
     } pos.needsUpdate = normal.needsUpdate = true; }
-    private pointerDown = (e: PointerEvent) => { this.down = [e.clientX, e.clientY];if(e.button===2){this.setMode(null);e.preventDefault();} };
-    private pointerUp = (e: PointerEvent) => { if (e.button!==0 || this.dragging || this.gizmo.axis || Math.hypot(e.clientX - this.down[0], e.clientY - this.down[1]) > 4)
+    private pointerDown = (e: PointerEvent) => { this.down = [e.clientX, e.clientY];if(e.button===2){this.setPinTool(null);e.preventDefault();} };
+    private pointerUp = (e: PointerEvent) => { if (e.button!==0 || this.dragging || (this.mode!==null && this.gizmo.axis) || Math.hypot(e.clientX - this.down[0], e.clientY - this.down[1]) > 4)
         return; const r = this.renderer.domElement.getBoundingClientRect(); this.pointer.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); this.ray.setFromCamera(this.pointer, this.camera); const meshes = this.items.flatMap(i => i.kind === 'body' ? i.meshes : [i.mesh]); for (const m of meshes)
-        m.geometry.computeBoundingSphere(); const hit = this.ray.intersectObjects(meshes, false)[0]; if (hit)
+        m.geometry.computeBoundingSphere(); const hits=this.ray.intersectObjects(meshes,false);
+        const cloth=this.items.find(i=>i.id===this.selected);
+        if(this.pinTool&&cloth?.kind==='cloth'){
+            if(this.pendingPin!==null){
+                const target=hits.find(h=>h.object.userData.part!==undefined);
+                if(!target)return;
+                const pins=this.bindings.get(cloth)??new Map();
+                pins.set(this.pendingPin,{mesh:target.object,local:target.object.worldToLocal(target.point.clone())});
+                this.bindings.set(cloth,pins);this.syncBindings();
+                cloth.sim.w[this.pendingPin]=cloth.sim.baseW[this.pendingPin]=0;
+                this.pendingPin=null;this.onPinStep?.(false);
+            }else{
+                const hit=hits.find(h=>h.object===cloth.mesh);if(!hit?.face)return;
+                const ids=[hit.face.a,hit.face.b,hit.face.c].map(j=>cloth.build.map[j]);
+                const dist=(j:number)=>new T.Vector3().fromArray(cloth.sim.x,j*3).distanceToSquared(hit.point);
+                const idx=ids.sort((a,b)=>dist(a)-dist(b))[0];
+                if(this.pinTool==='body'){this.pendingPin=idx;this.onPinStep?.(true);}
+                else{this.bindings.get(cloth)?.delete(idx);cloth.sim.w[idx]=cloth.sim.baseW[idx]=0;}
+            }
+            this.invalidate();return;
+        }
+        const hit=hits[0]; if (hit)
         this.select(hit.object.userData.item, hit.object.userData.part ?? 'root'); else this.setMode(null); };
     private resize() { this.renderer.setSize(Math.max(1, this.host.clientWidth), Math.max(1, this.host.clientHeight)); this.camera.aspect = Math.max(1, this.host.clientWidth) / Math.max(1, this.host.clientHeight); this.camera.updateProjectionMatrix(); this.invalidate(); }
     invalidate = () => { this.dirty = true; if (!this.raf && !this.disposed && !document.hidden)
@@ -444,7 +544,7 @@ export class CompositionWorkspace {
         const start = performance.now(), dt = 1 / this.pacer.fps, elapsed = this.last ? Math.min(.1, (time - this.last) / 1000) : dt;
         this.last = time;
         let step = false;
-        if (!this.paused && this.mode===null && !this.dragging && this.items.some(i => i.kind === 'cloth')) {
+        if (!this.paused && !this.pinTool && this.mode===null && !this.dragging && this.items.some(i => i.kind === 'cloth')) {
             this.accumulator += elapsed;
             if (this.accumulator >= dt) {
                 this.accumulator = Math.min(dt * .5, this.accumulator - dt);
@@ -475,7 +575,7 @@ export class CompositionWorkspace {
             this.frameCount = 0;
             this.fpsTime = time;
         }
-        if (!this.paused && this.mode===null && this.items.some(i => i.kind === 'cloth') || this.dragging)
+        if (!this.paused && !this.pinTool && this.mode===null && this.items.some(i => i.kind === 'cloth') || this.dragging)
             this.raf = requestAnimationFrame(this.tick);
     };
     dispose() { this.disposed = true; cancelAnimationFrame(this.raf); this.worker.terminate(); for (const j of this.jobs.values())

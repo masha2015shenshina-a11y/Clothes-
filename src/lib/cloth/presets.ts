@@ -36,7 +36,7 @@ export interface PresetDef {
 
 const boxOff: ColliderState = { on: false, x: 0.9, y: 0.35, z: 0.5, size: 0.7 };
 
-export interface SleeveSettings { length: number; ease: number; angle: number; shoulderX?:number; shoulderY?:number; shoulderZ?:number; shoulderPitch?:number; shoulderYaw?:number; }
+export interface SleeveSettings { mouth?:number;cuff?:number;bandPosition?:number;bandFit?:number; length: number; ease: number; angle: number; shoulderX?:number; shoulderY?:number; shoulderZ?:number; shoulderPitch?:number; shoulderYaw?:number; }
 export const DEFAULT_SLEEVE: SleeveSettings = {length: 1.65, ease: 0.10, angle: 35, shoulderX:-.85,shoulderY:1.65,shoulderZ:0,shoulderPitch:0,shoulderYaw:0};
 export const ARM_RADIUS = 0.13;
 export const ARM_SEGMENT = 0.85;
@@ -54,7 +54,7 @@ export function armPoints(angle: number,s: SleeveSettings=DEFAULT_SLEEVE) {
 export const PRESETS: PresetDef[] = [
   {id:"body",label:"Туловище",rect:false,defaultPin:"top",sphere:{on:false,x:0,y:.5,z:0,size:.4},box:boxOff},
   {id:"sleeve",label:"Рука с рукавом",rect:false,defaultPin:"top",sphere:{on:false,x:0,y:.5,z:0,size:.4},box:boxOff},
-  { id: "two", label: "Полотно", rect: true, defaultPin: "two", sphere: { on: true, x: 0, y: 0.55, z: 0.55, size: 0.45 }, box: boxOff },
+  { id: "two", label: "Полотно", rect: true, defaultPin: "none", sphere: { on: false, x: 0, y: 0.55, z: 0.55, size: 0.45 }, box: {...boxOff,x:0,z:0,y:1.18,size:.4} },
   { id: "ribbons", label: "Отдельные ленты", rect: true, defaultPin: "top", sphere: { on: true, x: 0, y: 0.5, z: 0.5, size: 0.45 }, box: boxOff },
   { id:"skirt",label:"Юбка",rect:false,defaultPin:"top",sphere:{on:false,x:0,y:.5,z:.9,size:.4},box:boxOff },
   { id:"pants",label:"Брюки",rect:false,defaultPin:"top",sphere:{on:false,x:0,y:.5,z:.9,size:.4},box:boxOff },
@@ -265,7 +265,7 @@ function hangingRect(b: Builder, w: number, h: number, cols: number, rows: numbe
 export interface SkirtSettings { length:number; width:number; style:"pencil"|"half"|"pleated"; folds:number; }
 export const DEFAULT_SKIRT:SkirtSettings={length:1.45,width:1,style:"half",folds:16};
 export interface LegPose { hip:number; knee:number; spread:number; }
-export interface LegsSettings { on:boolean; linked:boolean; x:number;y:number;z:number; length:number;ease:number; left:LegPose;right:LegPose; }
+export interface LegsSettings { belt?:number; beltHeight?:number;bandPosition?:number;bandFit?:number; on:boolean; linked:boolean; x:number;y:number;z:number; length:number;ease:number; left:LegPose;right:LegPose; }
 export const DEFAULT_LEGS:LegsSettings={on:true,linked:false,x:0,y:2.1,z:0,length:1.75,ease:.025,left:{hip:0,knee:0,spread:0},right:{hip:0,knee:0,spread:0}};
 export const LEG_RADIUS=.145, LEG_SEGMENT=.85;
 export function legPoints(s:LegsSettings,side:"left"|"right"): [V3,V3,V3] {
@@ -301,14 +301,14 @@ function pants(b:Builder,s:LegsSettings) {
  for(let k=0;k<3;k++)tangent[k]/=len;
  const radial=[1-tangent[0]*tangent[0],-tangent[0]*tangent[1],-tangent[0]*tangent[2]],rl=Math.hypot(...radial)||1;for(let k=0;k<3;k++)radial[k]/=rl;
  const binormal=[tangent[1]*radial[2]-tangent[2]*radial[1],tangent[2]*radial[0]-tangent[0]*radial[2],tangent[0]*radial[1]-tangent[1]*radial[0]];
- const kneeAllowance=.02*Math.sin(knee*Math.PI/360)*Math.exp(-(((d-LEG_SEGMENT)/.18)**2)),radius=r+kneeAllowance;
+ const kneeAllowance=.02*Math.sin(knee*Math.PI/360)*Math.exp(-(((d-LEG_SEGMENT)/.18)**2)),radius=r+kneeAllowance-s.ease*(s.bandFit??0)*Math.exp(-(((d/s.length-(s.bandPosition??.6))/.07)**2));
  const p=a.map((q,k)=>q+(c[k]-q)*v+radius*(radial[k]*Math.cos(t)+binormal[k]*Math.sin(t))) as V3;
  // Fade the shaped waistband into the thigh. Previously only row zero dipped at
  // the crotch, reversing the first faces; its rest lengths still described a cylinder.
  const u=Math.min(1,d/.48),waist=1-u*u*(3-2*u),inner=sign*Math.cos(t)<0;
- p[0]+=waist*(s.x+(inner?0:Math.cos(t)*(.26+s.ease*.15))-p[0]);
- p[1]+=waist*(.28-(inner?.48*Math.abs(Math.cos(t)):0));
- p[2]+=waist*(s.z+Math.sin(t)*(.18+s.ease*.1)-p[2]);
+ p[0]+=waist*(s.x+(inner?0:Math.cos(t)*(.26+s.ease*.15)*(s.belt??1))-p[0]);
+ p[1]+=waist*(.28+(s.beltHeight??0)-(inner?.48*Math.abs(Math.cos(t)):0));
+ p[2]+=waist*(s.z+Math.sin(t)*(.18+s.ease*.1)*(s.belt??1)-p[2]);
  return p;
  };
  b.grid({cols:N,rows,wrap:true,at:(i,j)=>point(i,j,pts,s[side].knee),
@@ -352,14 +352,14 @@ export function buildPreset(id: PresetId, pin: PinMode, sleeve: SleeveSettings =
     case "body": break;
     case "sleeve": {
       const N=b.resolution(36,4), distances=jointRows(sleeve.length,b.resolution(Math.ceil(sleeve.length/.045)+1),[[.85,.2]],6), rows=distances.length, radius=Math.max(ARM_RADIUS+.025,ARM_RADIUS+sleeve.ease);
-      const shoulderRadius=radius,offset=ARM_RADIUS+.025-radius;
-      const radiusAt=(_j:number)=>radius;
+      const shoulderRadius=Math.max(ARM_RADIUS+.025,radius*(sleeve.mouth??1)),offset=ARM_RADIUS+.025-shoulderRadius;
+      const radiusAt=(j:number)=>{const d=distances[j],band=(sleeve.bandFit??0)*Math.exp(-(((d/sleeve.length-(sleeve.bandPosition??.6))/.075)**2));return radius-(radius-ARM_RADIUS-.02)*band+(shoulderRadius-radius)*Math.max(0,1-d/.35)+radius*((sleeve.cuff??1)-1)*Math.max(0,1-(sleeve.length-d)/.32);};
       const rings=distances.map(d=>limbRing(armPoints(sleeve.angle,{...DEFAULT_SLEEVE}),d,.85,.85,.16));
       b.sleeveSupport={count:N,radius:shoulderRadius,offset,distances};
       b.grid({cols:N,rows,wrap:true,
         at:(i,j)=>{
           const ring=rings[j],phi=i/N*Math.PI*2,shift=offset*Math.max(0,1-distances[j]/.35);
-          return armTransform(ring.center.map((v,k)=>v+ring.radial[k]*(radius*Math.cos(phi)+shift)+ring.normal[k]*radius*Math.sin(phi)),sleeve);
+          return armTransform(ring.center.map((v,k)=>v+ring.radial[k]*(radiusAt(j)*Math.cos(phi)+shift)+ring.normal[k]*radiusAt(j)*Math.sin(phi)),sleeve);
         },
         restAt:(i,j)=>[-.85+distances[j],1.65+offset*Math.max(0,1-distances[j]/.35)+radiusAt(j)*Math.cos(i/N*Math.PI*2),radiusAt(j)*Math.sin(i/N*Math.PI*2)],
         uvAt:(i,j)=>[i/N*2*Math.PI*radius,distances[j]],pin:(_i,j)=>j===0});

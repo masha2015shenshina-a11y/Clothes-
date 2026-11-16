@@ -50,6 +50,7 @@ export class ClothSim {
   thickness = 0.014;
   time = 0;
   drapeBlend = 0;
+  private foldAllowance:Float32Array;
   lastH = 1 / 600;
   grab = -1;
   g = [0, 0, 0];
@@ -99,6 +100,15 @@ export class ClothSim {
     this.cons = b.cons;
     this.rest = b.rest;
     this.ctype = b.ctype;
+    // Shape broad cross-grain folds in pattern coordinates, independent of pose.
+    const u=new Float32Array(this.n),v=new Float32Array(this.n);
+    if(b.uv)for(let j=0;j<b.map.length;j++){u[b.map[j]]=b.uv[j*2];v[b.map[j]]=b.uv[j*2+1];}
+    this.foldAllowance=new Float32Array(this.m);
+    for(let k=0;k<this.m;k++){
+      const a=b.cons[k*2],c=b.cons[k*2+1],du=Math.abs(u[a]-u[c]),dv=Math.abs(v[a]-v[c]);
+      const cross=du/(du+dv||1),ridge=Math.cos((u[a]+u[c])*5+(v[a]+v[c])*.65);
+      this.foldAllowance[k]=b.ctype[k]>=3?0:cross*(.23-(b.ctype[k]===2?.035*ridge**4:0));
+    }
     this.stretchEdges=Int32Array.from(Array.from(b.ctype).flatMap((type,k)=>type===0||type===3?[k]:[]));
     this.tris = new Uint32Array(b.index.length);
     for (let k = 0; k < b.index.length; k++) this.tris[k] = b.map[b.index[k]];
@@ -145,7 +155,7 @@ export class ClothSim {
       this.collide();
       if(this.garmentContacts&&(s===3||s===this.substeps-1)){this.garmentContacts.solve(this);this.collide();}
       if(s===this.substeps-1&&((this.params.capsules?.length??0)||(this.params.ellipsoids?.length??0))){for(let pass=0;pass<3;pass++){this.surfaceContacts.solve(this);this.limitContactStretch();this.waist?.solve(this,h);this.collide();if(this.surfaceContacts.maxPenetration<.004)break;}}
-      if(s===3||s===this.substeps-1){const boxes=this.params.boxes;for(let k=0;k<(boxes?.length??1);k++){const box=boxes?boxes[k]:this.params.box;if(!box.on)continue;for(let pass=0;pass<3;pass++){const depth=this.boxContacts.solve(this,box);this.collide();if(depth<.002)break;}}}
+      if(s===3||s===this.substeps-1){const boxes=this.params.boxes;for(let k=0;k<(boxes?.length??1);k++){const box=boxes?boxes[k]:this.params.box;if(!box.on)continue;for(let pass=0;pass<3;pass++){const depth=this.boxContacts.solve(this,box);if(depth>0)this.collide();if(depth<.002)break;}}}
       // Constraint/contact corrections must not become an unbounded Verlet impulse.
       const limit=25*h;
       for(let i=0;i<this.n;i++){if(!this.w[i])continue;const o=i*3,dx=this.x[o]-this.p[o],dy=this.x[o+1]-this.p[o+1],dz=this.x[o+2]-this.p[o+2],d2=dx*dx+dy*dy+dz*dz;if(d2>limit*limit){const scale=limit/Math.sqrt(d2);this.p[o]=this.x[o]-dx*scale;this.p[o+1]=this.x[o+1]-dy*scale;this.p[o+2]=this.x[o+2]-dz*scale;}}
@@ -213,7 +223,7 @@ export class ClothSim {
     const dl = Math.hypot(P.windX, P.windY ?? 0, P.windZ) || 1;
     const dx = P.windX / dl, dy=(P.windY ?? 0)/dl, dz = P.windZ / dl;
     const gust = P.windStrength>0?0.75 + 0.25 * Math.sin(t * 1.1) + 0.15 * Math.sin(t * 2.7 + 1.3):0;
-    const k = 1.4 / P.density;
+    const k = 1.4 / (P.density*(1+this.drapeBlend*.8));
     const inv = 1 / this.lastH;
     for (let i = 0; i < this.n; i++) {
       const o = i * 3;
@@ -226,7 +236,7 @@ export class ClothSim {
       const pressure = d * Math.abs(d) * k;
       const clamp=(v:number)=>Math.max(-90,Math.min(90,v));
       acc[o] = clamp(nrm[o] * pressure + rx * .25);
-      acc[o + 1] = clamp(nrm[o + 1] * pressure + ry * .25) - P.gravity;
+      acc[o + 1] = clamp(nrm[o + 1] * pressure + ry * .25) - P.gravity*(1+.32*this.drapeBlend);
       acc[o + 2] = clamp(nrm[o + 2] * pressure + rz * .25);
     }
   }
@@ -236,11 +246,12 @@ export class ClothSim {
     const damp = Math.exp(-this.params.damping * h);
     const h2 = h * h;
     const maxStep = 25 * h;
+    const contactDamping=Math.exp(-45*this.params.friction*h);
     for (let i = 0; i < this.n; i++) {
       if (w[i] === 0) continue;
       const o = i * 3;
       let vx = (x[o] - p[o]) * damp, vy = (x[o + 1] - p[o + 1]) * damp, vz = (x[o + 2] - p[o + 2]) * damp;
-      if(x[o+1]<this.thickness+.10&&this.params.friction>0){const contactDamping=Math.exp(-45*this.params.friction*h);vx*=contactDamping;vy*=contactDamping;vz*=contactDamping;}
+      if(x[o+1]<this.thickness+.10&&this.params.friction>0){vx*=contactDamping;vy*=contactDamping;vz*=contactDamping;}
       const l = Math.hypot(vx, vy, vz);
       if (l > maxStep) { const s = maxStep / l; vx *= s; vy *= s; vz *= s; }
       p[o] = x[o]; p[o + 1] = x[o + 1]; p[o + 2] = x[o + 2];
@@ -273,7 +284,7 @@ export class ClothSim {
       const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (len < 1e-9) continue;
       // Extra ease creates deeper drapes; seams and fixed anchors retain their size.
-      const ease=ctype[k]>=3?1:1+.36*style*(wa===0||wb===0?.25:1);
+      const ease=ctype[k]>=3?1:1+this.foldAllowance[k]*style*(wa===0||wb===0?.25:1);
       const s = -(len - rest[k]*ease) / ((ws + (ctype[k]===0?stretch:ctype[k]===1?shear:ctype[k]===3?seamStretch:ctype[k]===4?seamBend:bend)) * len);
       x[ao] += wa * s * dx; x[ao + 1] += wa * s * dy; x[ao + 2] += wa * s * dz;
       x[bo] -= wb * s * dx; x[bo + 1] -= wb * s * dy; x[bo + 2] -= wb * s * dz;
@@ -391,7 +402,7 @@ export class ClothSim {
   /** Position-level static friction prevents constraint corrections creeping across a support.
    * The threshold scales with the contact load; steep faces and real pulls still slip. */
   private supportFriction(o:number,nx:number,ny:number,nz:number,depth:number){
-    const mu=this.params.friction;if(ny<=.2||mu<=0)return;
+    const mu=Math.min(.98,this.params.friction*(1+.45*this.drapeBlend));if(ny<=.2||mu<=0)return;
     const dx=this.x[o]-this.contactStart[o],dy=this.x[o+1]-this.contactStart[o+1],dz=this.x[o+2]-this.contactStart[o+2];
     const dot=dx*nx+dy*ny+dz*nz,tx=dx-dot*nx,ty=dy-dot*ny,tz=dz-dot*nz;
     const distance=Math.hypot(tx,ty,tz),load=Math.max(0,depth)+this.params.gravity*this.lastH*this.lastH*ny;

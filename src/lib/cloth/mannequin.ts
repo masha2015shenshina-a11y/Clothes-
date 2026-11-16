@@ -70,7 +70,7 @@ export function addUpperGarments(b:Builder,s:BodySettings,r:LegsSettings){
  capeStart=capeBase;
  const collar=(a:number):V3=>[r.x+Math.sin(a)*.13,r.y+.99-.025*Math.cos(a),r.z+Math.cos(a)*.14];
  b.grid({cols:N,rows,wrap:false,at:(i,j)=>{const a=.48+i/(N-1)*(2*Math.PI-.96),profile=capeProfile(drops[j]);
- if(j===0)return collar(a);return [r.x+Math.sin(a)*profile.width,r.y+profile.height-.025*Math.cos(a)*profile.collarWeight,r.z+Math.cos(a)*profile.depth];},uvAt:(i,j)=>[i/(N-1)*2,drops[j]],pin:(_i,j)=>j===0});
+ if(j===0)return collar(a);return [r.x+Math.sin(a)*profile.width,r.y+profile.height-.025*Math.cos(a)*profile.collarWeight,r.z+Math.cos(a)*profile.depth-.065*Math.min(1,drops[j]/.36)*(1-Math.cos(a))*.5];},uvAt:(i,j)=>[i/(N-1)*2,drops[j]],pin:(_i,j)=>j===0});
  // Neck ring stays fixed in both poses. Hood is changed as a preset, not pulled through the head.
  hoodStart=b.pos.length/3;
  const up=s.hood==='up',C=N,R=10,hoodBase=b.pos.length/3,obstacles=bodyEllipsoids(r,true);

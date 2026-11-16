@@ -1,3 +1,4 @@
+import {makeTable,tableParts,carryContact,downloadFrame} from './studioTools';
 import {ContourView} from './contour';
 import {updateSoloSleeve,followSoloSleeve} from './soloSleeve';
 import { t as translate } from '../i18n';
@@ -33,6 +34,7 @@ export interface EngineSettings {
   selected: Selection;
   dragPlane: "view" | "floor";
   windAngle: number; // degrees
+  table?:boolean;
   drapeMode?: 'normal'|'exaggerated';
   stiffness: number; // 0.2..3
   material: MaterialId;
@@ -164,6 +166,7 @@ export class ClothEngine {
   clothMat: THREE.MeshPhysicalMaterial;
   pins: THREE.Points;
   sphereMesh: THREE.Mesh;
+  table=makeTable();
   boxMesh: THREE.Mesh;
   settings: EngineSettings;
   textures = new Map<string, THREE.Texture>();
@@ -322,7 +325,7 @@ export class ClothEngine {
     (floor.material as THREE.MeshStandardMaterial).map!.repeat.set(40, 40);
     this.floorMat=floor.material as THREE.MeshStandardMaterial;
     floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
+    floor.receiveShadow = true;floor.userData.skipInk=true;
     this.scene.add(floor);
 
     const objMat = new THREE.MeshStandardMaterial({ color: "#d9d3c9", roughness: 0.4 });
@@ -330,7 +333,7 @@ export class ClothEngine {
     this.sphereMesh.castShadow = this.sphereMesh.receiveShadow = true;
     this.boxMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#5b5650", roughness: 0.55 }));
     this.boxMesh.castShadow = this.boxMesh.receiveShadow = true;
-    this.scene.add(this.sphereMesh, this.boxMesh);
+    this.scene.add(this.sphereMesh, this.boxMesh,this.table);
     for(let i=0;i<2;i++) {
       const m=new THREE.Mesh(limbGeometry(.85,ARM_RADIUS*(i?.83:1),!!i),wood());
       m.castShadow=m.receiveShadow=true;this.armSegments.push(m);this.armGroup.add(m);
@@ -339,7 +342,7 @@ export class ClothEngine {
     this.soloHand=mesh(anatomy.hand,wood(),this.armGroup,'arm');
     this.shoulder.renderOrder=30;this.armGroup.add(this.elbow,this.wrist,this.shoulder);this.scene.add(this.armGroup);
     this.wrist.renderOrder=30;
-    this.scene.add(this.windSock);
+    this.windSock.userData.skipInk=true;this.scene.add(this.windSock);
     const dotGeometry=new THREE.IcosahedronGeometry(.045,0),hitGeometry=new THREE.SphereGeometry(.18,8,6),hitMaterial=new THREE.MeshBasicMaterial({visible:false});
     for(const v of [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]) {
       const direction=new THREE.Vector3(...v);
@@ -348,7 +351,7 @@ export class ClothEngine {
       const dot=new THREE.Mesh(dotGeometry,new THREE.MeshBasicMaterial({color:0x8b939b,depthTest:false}));dot.renderOrder=30;
       const hit=new THREE.Mesh(hitGeometry,hitMaterial);
       hit.position.copy(this.windOrigin).addScaledVector(direction,.6);
-      this.scene.add(arrow,hit,dot);this.windAxes.push({direction,arrow,hit,dot});
+      arrow.userData.skipInk=hit.userData.skipInk=dot.userData.skipInk=true;this.scene.add(arrow,hit,dot);this.windAxes.push({direction,arrow,hit,dot});
     }
 
     this.clothMat = new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, sheenColor: new THREE.Color("#ffffff") });
@@ -395,7 +398,9 @@ export class ClothEngine {
   simParams(s: EngineSettings): SimParams {
     const M = MATERIALS[s.material];
     const a = (s.windAngle * Math.PI) / 180;
+    const box={on:s.box.on,x:s.box.x,y:s.box.y,z:s.box.z,s:s.box.size,width:s.box.width,height:s.box.height,depth:s.box.depth,basis:this.boxBasis(s.box)};
     return {
+      boxes:s.table?[...tableParts,box]:undefined,
       shoulder:s.armEnabled?s.sleeve:undefined,
       gravity: s.gravity,
       windX: Math.sin(a)*Math.cos(s.windElevation*Math.PI/180),
@@ -530,10 +535,14 @@ export class ClothEngine {
     }
     if(this.sim&&!this.clothDetached&&previous.mannequin&&s.mannequin){const dx=s.legs.x-previous.legs.x,dy=s.legs.y-previous.legs.y,dz=s.legs.z-previous.legs.z;if(dx||dy||dz){for(const b of [this.sim.x,this.sim.p])for(let i=0;i<b.length;i+=3){b[i]+=dx;b[i+1]+=dy;b[i+2]+=dz;}this.geometryDirty=true;this.invalidate();}}
     this.invalidate();
+    if(this.sim&&previous.box!==s.box&&previous.box.on&&s.box.on){
+      carryContact(this.sim,this.sim.params.box,s.box.x-previous.box.x,s.box.y-previous.box.y,s.box.z-previous.box.z);this.geometryDirty=true;
+    }
     this.settings = s;
-    if(s.paused){this.geometryDirty=true;this.bodyPose=structuredClone(s.body);if(this.sim&&this.build&&!this.clothDetached)followUpperPose(this.sim,this.build,s.legs,previousBodyPose,this.bodyPose);}
+    const posing=s.paused||!!this.rotationTool?.control.object;
+    if(posing){this.geometryDirty=true;this.bodyPose=structuredClone(s.body);if(this.sim&&this.build&&!this.clothDetached)followUpperPose(this.sim,this.build,s.legs,previousBodyPose,this.bodyPose);}
     this.renderer.shadowMap.needsUpdate=true;
-    this.legPose=s.paused?structuredClone(s.legs):{...s.legs,left:this.legPose.left,right:this.legPose.right};
+    this.legPose=posing?structuredClone(s.legs):{...s.legs,left:this.legPose.left,right:this.legPose.right};
     if(this.sim&&this.build&&!this.clothDetached)followLegPose(this.sim,this.build,previousLegPose,this.legPose);
     const background=s.theme==="dark"?"#15191e":"#efe8dd";
     (this.scene.background as THREE.Color).set(background);
@@ -560,6 +569,7 @@ export class ClothEngine {
     this.sphereMesh.visible = s.sphere.on;
     this.sphereMesh.position.set(s.sphere.x, s.sphere.y, s.sphere.z);
     this.sphereMesh.scale.setScalar(s.sphere.size);
+    this.table.visible=!!s.table;
     this.boxMesh.visible = s.box.on;
     this.boxMesh.rotation.set(...(s.box.rotation??[0,0,0]));this.sphereMesh.rotation.set(...(s.sphere.rotation??[0,0,0]));
     this.rotationTool?.sync();
@@ -712,12 +722,8 @@ export class ClothEngine {
     this.controls.update();
   }
   snapshot() {
-    if(this.settings.contour)(this.contourView??=new ContourView()).render(this.renderer,this.scene,this.camera);else if(this.settings.contour)(this.contourView??=new ContourView()).render(this.renderer,this.scene,this.camera);else this.renderer.render(this.scene,this.camera);
-    const url = this.renderer.domElement.toDataURL("image/png");
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `skladka-${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
-    a.click();
+    this.renderFrame();
+    downloadFrame(this.renderer.domElement);
   }
 
   private setNdc(e: PointerEvent) {

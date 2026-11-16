@@ -1,5 +1,7 @@
 import * as T from 'three';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import {bodyArmPoints} from './mannequin';
+import {legPoints} from './presets';
 import type { ClothEngine } from './engine';
 /** Rotation uses the same world coordinates as the solver, including its history. */
 export class RotationTool {
@@ -15,6 +17,7 @@ export class RotationTool {
         this.control.setMode('rotate');
         this.control.setSpace('world');
         this.control.setSize(.9);
+        this.control.getHelper().userData.skipInk=true;
         e.scene.add(this.control.getHelper(), this.proxy);
         this.control.addEventListener('dragging-changed', event => { this.dragging = !!event.value; e.controls.enabled = !this.dragging; if (!this.dragging) {
             e.editRevision++;
@@ -28,7 +31,7 @@ export class RotationTool {
         if (this.dragging)
             return;
         const e = this.engine, k = e.settings.selected;
-        if (this.enabled === null || !['cloth','sphere','box'].includes(k)||(k==='cloth'&&!e.sim)) {
+        if (this.enabled === null || !['cloth','sphere','box','torso','head','leftLeg','rightLeg','leftBodyArm','rightBodyArm'].includes(k)||(k==='cloth'&&!e.sim)) {
             this.control.detach();
             this.attached = '';
             return;
@@ -38,7 +41,22 @@ export class RotationTool {
         this.attached = k;
         this.control.setMode(k==='sphere'||!this.enabled?'translate':'rotate');
         this.proxy.rotation.set(0, 0, 0);
-        if (k === 'cloth' && e.sim) {
+        const pose=['torso','head','leftLeg','rightLeg','leftBodyArm','rightBodyArm'].includes(k);
+        this.control.showY=!pose;
+        if(pose){
+            const {body,legs}=e.settings,side=k.startsWith('left')?'left':'right',rad=T.MathUtils.degToRad;
+            this.control.setMode('rotate');
+            if(k==='head'||k==='torso'){
+                this.proxy.position.copy(e.bodyShapes[k==='head'?4:1].position);
+                this.proxy.rotation.set(rad(k==='head'?body.headPitch:body.torsoPitch),0,-rad(k==='head'?body.headLean:body.torsoLean));
+            }else if(k.endsWith('Leg')){
+                this.proxy.position.fromArray(legPoints(legs,side)[0]);
+                this.proxy.rotation.set(rad(legs[side].hip),0,rad(legs[side].spread));
+            }else{
+                this.proxy.position.fromArray(bodyArmPoints(legs,body,side)[0]);
+                this.proxy.rotation.set(rad(body[side].forward),0,rad(body[side].raise));
+            }
+        }else if (k === 'cloth' && e.sim) {
             const bounds = new T.Box3();
             const v = new T.Vector3();
             for (let i = 0; i < e.sim.x.length; i += 3)
@@ -59,7 +77,20 @@ export class RotationTool {
         if (!this.dragging)
             return;
         const e = this.engine, k = e.settings.selected;
-        if (k === 'cloth' && e.sim) {
+        const pose=['torso','head','leftLeg','rightLeg','leftBodyArm','rightBodyArm'].includes(k);
+        if(pose){
+            const {body,legs}=e.settings,side=k.startsWith('left')?'left':'right';
+            const x=T.MathUtils.radToDeg(this.proxy.rotation.x),z=T.MathUtils.radToDeg(this.proxy.rotation.z),clamp=T.MathUtils.clamp;
+            if(k==='torso'||k==='head'){
+                e.change({body:{...body,[k+'Pitch']:clamp(x,-55,65),[k+'Lean']:clamp(-z,-40,40)}});
+            }else if(k.endsWith('Leg')){
+                const next={...legs[side],hip:clamp(x,-70,120),spread:clamp(z,-20,75)};
+                e.change({legs:{...legs,[side]:next,...(legs.linked?{left:next,right:{...next}}:{})}});
+            }else{
+                const next={...body[side],forward:clamp(x,-70,150),raise:clamp(z,-10,160)};
+                e.change({body:{...body,[side]:next,...(body.linked?{left:next,right:{...next}}:{})}});
+            }
+        }else if (k === 'cloth' && e.sim) {
             e.detachClothFromBody();
             this.proxy.updateMatrixWorld();
             const delta = new T.Matrix4().copy(this.last).invert().premultiply(this.proxy.matrixWorld), v = new T.Vector3();
