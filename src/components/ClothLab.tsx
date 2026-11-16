@@ -261,7 +261,7 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
       }catch{fail();}
     },60);
     return ()=>{cancelled=true;clearTimeout(timer);cancelAnimationFrame(finishFrame);};
-  }, [sheet.width,sheet.length,quality,preset, pin, resetTick, glError, sleeve.length, sleeve.ease,sleeve.mouth,sleeve.cuff,sleeve.bandPosition,sleeve.bandFit,legs.bandPosition,legs.bandFit,legs.belt,legs.beltHeight, skirt.length,skirt.width,skirt.style,skirt.folds,legs.length,legs.ease,body.on,body.sleeves,body.arms,body.tunic,body.length,body.ease,body.cape,body.capeLength,body.hood]);
+  }, [sheet.width,sheet.length,quality,preset, pin, resetTick, glError, sleeve.length, sleeve.ease,sleeve.mouth,sleeve.cuff,sleeve.bandPosition,sleeve.bandFit,legs.bandPosition,legs.bandFit,legs.belt,legs.beltHeight, skirt.length,skirt.width,skirt.style,skirt.folds,legs.length,legs.ease,body.on,body.sleeves,body.sleeveEase,body.belted,body.arms,body.tunic,body.length,body.ease,body.cape,body.capeLength,body.hood]);
 
   const choosePreset = (id: PresetId) => {
     setRotateMode(null);engineRef.current?.setRotationMode(null);
@@ -417,8 +417,9 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
           </Section>)}
           {tr(mannequin&&<>
             <Section title="Ноги">
+              <button className="lab-btn" onClick={()=>setLegs({...legs,linked:false,left:{hip:20,knee:12,spread:-20},right:{hip:-5,knee:2,spread:-8}})}>{tr("Скрестить ноги")}</button>
               <LimbButtons kind="Leg" side={legSide} linked={legs.linked} onSelect={selectLeg}/>
-              {tr((["hip","knee","spread"] as const).map((key,i)=><Slider key={key} label={["Бедро","Колено","В сторону"][i]} value={legs[legSide][key]} min={key==="hip"?-70:0} max={key==="hip"?100:key==="knee"?135:35} step={1} unit="°" digits={0} onChange={v=>{const pose:LegPose={...legs[legSide],[key]:v};setLegs({...legs,[legSide]:pose,...(legs.linked?{left:pose,right:{...pose}}:{})});}}/>))}
+              {tr((["hip","knee","spread"] as const).map((key,i)=><Slider key={key} label={["Бедро","Колено","В сторону"][i]} value={legs[legSide][key]} min={key==="hip"?-70:key==="spread"?-50:0} max={key==="hip"?100:key==="knee"?135:35} step={1} unit="°" digits={0} onChange={v=>{const pose:LegPose={...legs[legSide],[key]:v};setLegs({...legs,[legSide]:pose,...(legs.linked?{left:pose,right:{...pose}}:{})});}}/>))}
               {tr((["x","y","z"] as const).map(axis=><Slider key={axis} label={`Таз · ${axis}`} value={legs[axis]} min={axis==="y"?.4:-3} max={3.5} step={.01} unit=" м" onChange={v=>setLegs({...legs,[axis]:v})}/>))}
             </Section>
             {tr(preset==="pants"&&<Section title="Брюки">
@@ -436,7 +437,9 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
             </Section>
             <Section title="Одежда туловища">
               <div className="grid grid-cols-3 gap-1">{tr(([{key:"tunic",label:"Кофта"},{key:"sleeves",label:"Рукава"},{key:"cape",label:"Плащ"}] as const).map(item=><button className="lab-btn" key={item.key} aria-pressed={body[item.key]} data-selected={body[item.key]} onClick={()=>setBody({...body,[item.key]:!body[item.key],...(item.key==="sleeves"&&!body.sleeves?{tunic:true,arms:true}:{})})}>{tr(item.label)}</button>))}</div>
-              {tr(body.tunic&&<><Slider label="Длина кофты" value={body.length} min={.45} max={1.8} step={.01} unit=" м" onChange={length=>setBody({...body,length})}/><Slider label="Свобода облегания" value={body.ease} min={.025} max={.28} step={.005} unit=" м" onChange={ease=>setBody({...body,ease})}/></>)}
+              {body.sleeves&&<Slider label="Ширина рукавов" value={body.sleeveEase??.045} min={.012} max={.22} step={.005} unit=" м" onChange={sleeveEase=>setBody({...body,sleeveEase})}/>}
+              {body.tunic&&<button className="lab-btn" aria-pressed={!!body.belted} data-selected={!!body.belted} onClick={()=>setBody({...body,belted:!body.belted})}>{tr("Кофта с поясом")}</button>}
+              {tr(body.tunic&&<><Slider label="Длина кофты" value={body.length} min={.45} max={1.8} step={.01} unit=" м" onChange={length=>setBody({...body,length})}/><Slider label="Ширина кофты" value={body.ease} min={.025} max={.28} step={.005} unit=" м" onChange={ease=>setBody({...body,ease})}/></>)}
               {tr(body.cape&&<><Slider label="Длина плаща" value={body.capeLength} min={.45} max={2.5} step={.01} unit=" м" onChange={capeLength=>setBody({...body,capeLength})}/><Seg options={[{id:"up",label:"Капюшон надет"},{id:"down",label:"Опущен"}]} value={body.hood} onChange={hood=>setBody({...body,hood})}/></>)}
             </Section>
             <Section title="Руки">

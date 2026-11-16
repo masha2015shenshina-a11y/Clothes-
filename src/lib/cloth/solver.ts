@@ -24,6 +24,7 @@ export interface SimParams {
   density: number;
   friction: number;
   sphere: { on: boolean; x: number; y: number; z: number; r: number };
+  tabletop?: SimParams['box'];
   boxes?: SimParams['box'][];
   box: { on: boolean; x: number; y: number; z: number; s: number; width?:number;height?:number;depth?:number;basis?:number[] };
 }
@@ -74,6 +75,7 @@ export class ClothSim {
   garmentContacts:GarmentContacts|null=null;
   private previousCapsules: NonNullable<SimParams['capsules']>=[];
   private movingCapsules: NonNullable<SimParams['capsules']>=[];
+  private tableGrip?:Float32Array;
   private contactStart: Float32Array;
   syncColliderHistory(){
     this.previousCapsules=(this.params.capsules??[]).map(c=>({a:[...c.a],b:[...c.b],r:c.r}));
@@ -82,11 +84,12 @@ export class ClothSim {
 
   constructor(b: ClothBuild, params: SimParams) {
     this.n = b.x.length / 3;
+    if(b.upper||b.sleeveSupport||b.waist)this.thickness=.009;
     this.sleeveSupport=b.sleeveSupport;
     if(b.waist)this.waist=new WaistSupport(b.waist);
     this.strainEnd=(b.upper?.capeStart??-1)>=0?b.upper!.capeStart:(b.upper?.sleevesStart??-1)>=0?b.upper!.sleevesStart:this.n;
     if(b.upper&&b.upper.capeStart>b.upper.start)this.garmentContacts=new GarmentContacts(b);
-    this.capeStart=b.upper?.capeStart??-1;this.capeEnd=b.upper?.hoodStart??-1;this.capeArmClearance=(b.upper?.sleevesStart??-1)>=0?.045:0;
+    this.capeStart=b.upper?.capeStart??-1;this.capeEnd=b.upper?.hoodStart??-1;this.capeArmClearance=(b.upper?.sleevesStart??-1)>=0?.018:0;
     this.locked=b.locked?.slice()??new Uint8Array(this.n);
     this.m = b.rest.length;
     this.x = b.x.slice();
@@ -156,6 +159,7 @@ export class ClothSim {
       if(this.garmentContacts&&(s===3||s===this.substeps-1)){this.garmentContacts.solve(this);this.collide();}
       if(s===this.substeps-1&&((this.params.capsules?.length??0)||(this.params.ellipsoids?.length??0))){for(let pass=0;pass<3;pass++){this.surfaceContacts.solve(this);this.limitContactStretch();this.waist?.solve(this,h);this.collide();if(this.surfaceContacts.maxPenetration<.004)break;}}
       if(s===3||s===this.substeps-1){const boxes=this.params.boxes;for(let k=0;k<(boxes?.length??1);k++){const box=boxes?boxes[k]:this.params.box;if(!box.on)continue;for(let pass=0;pass<3;pass++){const depth=this.boxContacts.solve(this,box);if(depth>0)this.collide();if(depth<.002)break;}}}
+      if(this.params.tabletop)this.holdTabletop(this.params.tabletop,h);
       // Constraint/contact corrections must not become an unbounded Verlet impulse.
       const limit=25*h;
       for(let i=0;i<this.n;i++){if(!this.w[i])continue;const o=i*3,dx=this.x[o]-this.p[o],dy=this.x[o+1]-this.p[o+1],dz=this.x[o+2]-this.p[o+2],d2=dx*dx+dy*dy+dz*dz;if(d2>limit*limit){const scale=limit/Math.sqrt(d2);this.p[o]=this.x[o]-dx*scale;this.p[o+1]=this.x[o+1]-dy*scale;this.p[o+2]=this.x[o+2]-dz*scale;}}
@@ -252,8 +256,8 @@ export class ClothSim {
       const o = i * 3;
       let vx = (x[o] - p[o]) * damp, vy = (x[o + 1] - p[o + 1]) * damp, vz = (x[o + 2] - p[o + 2]) * damp;
       if(x[o+1]<this.thickness+.10&&this.params.friction>0){vx*=contactDamping;vy*=contactDamping;vz*=contactDamping;}
-      const l = Math.hypot(vx, vy, vz);
-      if (l > maxStep) { const s = maxStep / l; vx *= s; vy *= s; vz *= s; }
+      const speed2=vx*vx+vy*vy+vz*vz;
+      if (speed2 > maxStep*maxStep) { const s = maxStep / Math.sqrt(speed2); vx *= s; vy *= s; vz *= s; }
       p[o] = x[o]; p[o + 1] = x[o + 1]; p[o + 2] = x[o + 2];
       x[o] += vx + acc[o] * h2;
       x[o + 1] += vy + acc[o + 1] * h2;
@@ -333,7 +337,7 @@ export class ClothSim {
     for (let i = 0; i < this.n; i++) {
       if (w[i] === 0) continue;
       const o = i * 3;
-      const th=i>=this.capeStart&&i<this.capeEnd?.035:this.thickness;
+      const th=i>=this.capeStart&&i<this.capeEnd?.018:this.thickness;
       if (x[o + 1] < th+.001) {
         const penetration=Math.max(0,th-x[o+1]);x[o+1]=th;
         const dx=x[o]-this.contactStart[o],dz=x[o+2]-this.contactStart[o+2],distance=Math.hypot(dx,dz);
@@ -396,6 +400,27 @@ export class ClothSim {
           x[o]+=dx*depth;x[o+1]+=dy*depth;x[o+2]+=dz*depth;p[o]+=dx*depth;p[o+1]+=dy*depth;p[o+2]+=dz*depth;this.supportFriction(o,dx,dy,dz,depth);this.friction(o,dx,dy,dz,keep);
         }
       }
+    }
+  }
+
+  releaseTableGrip(i:number){if(this.tableGrip)this.tableGrip[i*3+1]=0;}
+  private holdTabletop(table:SimParams['box'],h:number){
+    const {x,p,w}=this,top=table.y+(table.height??table.s)/2+this.thickness;
+    const grip=this.tableGrip??(this.tableGrip=new Float32Array(this.n*3));
+    for(let i=0;i<this.n;i++){
+      const o=i*3;
+      if(!w[i]||this.grab===i||Math.abs(x[o+1]-top)>.008||
+         Math.abs(x[o]-table.x)>(table.width??table.s)/2||Math.abs(x[o+2]-table.z)>(table.depth??table.s)/2){
+        grip[o+1]=0;continue;
+      }
+      if(!grip[o+1]){
+        if(Math.hypot(x[o]-p[o],x[o+2]-p[o+2])>.30*h)continue;
+        grip[o]=x[o];grip[o+2]=x[o+2];grip[o+1]=1;continue;
+      }
+      const dx=grip[o]-x[o],dz=grip[o+2]-x[o+2],d=Math.hypot(dx,dz);
+      const limit=.006+.022*this.params.friction;
+      if(d>limit){grip[o+1]=0;continue;}
+      x[o]+=dx*.8;x[o+2]+=dz*.8;p[o]=x[o];p[o+2]=x[o+2];
     }
   }
 

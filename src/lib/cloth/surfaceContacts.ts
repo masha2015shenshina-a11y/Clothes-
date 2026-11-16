@@ -129,7 +129,7 @@ export class SurfaceContacts {
         // Cap one correction, resolving severe overlap across substeps without an impulse.
         const len = Math.hypot(dx, dy, dz), scale = len > .025 ? .025 / len : 1;
         for (let j = 0; j < 3; j++) {
-            const o = j === 0 ? a : j === 1 ? b : c, f = Math.min(.025 / Math.max(len, 1e-12), sim.w[o / 3] * w[j] / mass * scale);
+            const o = j === 0 ? a : j === 1 ? b : c, f = Math.min(.016 / Math.max(len, 1e-12), sim.w[o / 3] * w[j] / mass * scale);
             sim.x[o] += dx * f;
             sim.x[o + 1] += dy * f;
             sim.x[o + 2] += dz * f;
@@ -148,7 +148,7 @@ export class SurfaceContacts {
             if (resolve && !sim.w[a / 3] && !sim.w[b / 3] && !sim.w[c / 3])
                 continue;
             const minX = Math.min(x[a], x[b], x[c]), maxX = Math.max(x[a], x[b], x[c]), minY = Math.min(x[a + 1], x[b + 1], x[c + 1]), maxY = Math.max(x[a + 1], x[b + 1], x[c + 1]), minZ = Math.min(x[a + 2], x[b + 2], x[c + 2]), maxZ = Math.max(x[a + 2], x[b + 2], x[c + 2]);
-            const cape = a / 3 >= sim.capeStart && a / 3 < sim.capeEnd, padding = cape ? .035 + sim.capeArmClearance : sim.thickness;
+            const cape = a / 3 >= sim.capeStart && a / 3 < sim.capeEnd, padding = cape ? .018 + sim.capeArmClearance : sim.thickness;
             for (const C of sim.params.capsules ?? []) {
                 const r = C.r + padding;
                 if (maxX < Math.min(C.a[0], C.b[0]) - r || minX > Math.max(C.a[0], C.b[0]) + r || maxY < Math.min(C.a[1], C.b[1]) - r || minY > Math.max(C.a[1], C.b[1]) + r || maxZ < Math.min(C.a[2], C.b[2]) - r || minZ > Math.max(C.a[2], C.b[2]) + r)

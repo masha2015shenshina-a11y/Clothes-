@@ -92,6 +92,7 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
 export interface WaistBuild {kind:'pants'|'skirt';indices:Uint32Array;reference:Float32Array;origin:V3;}
 export interface ClothBuild {
   sleeveSupport?: {count:number;radius:number;offset:number;distances:number[]};
+  beltVertices?: number[];
   waist?: WaistBuild;
   upper?: {start:number;capeStart:number;hoodStart:number;sleevesStart:number;sleeveCols:number;sleeveDistances:number[];reference:Float32Array};
   skirt?: {cols:number;rows:number;length:number;width:number;style:string;folds:number};
@@ -126,6 +127,7 @@ export class Builder {
   upper?: ClothBuild["upper"];
   skirt?: ClothBuild["skirt"];
   sleeveSupport?: {count:number;radius:number;offset:number;distances:number[]};
+  beltVertices?: number[];
   waist?: WaistBuild;
   seam: number[] = [];
   pos: number[] = [];
@@ -140,6 +142,11 @@ export class Builder {
   uv: number[] = [];
   index: number[] = [];
 
+  markTubeSeams(start:number,cols:number,rows:number){
+    for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){
+      if(row===0||row===rows-1||col===0||col===cols/2)this.seam[start+row*cols+col]=1;
+    }
+  }
   grid(o: GridOpts) {
     const base = this.pos.length / 3;
     const { cols, rows, wrap } = o;
@@ -211,6 +218,7 @@ export class Builder {
     for(let k=0;k<this.index.length;k+=3){const a=this.index[k],c=this.index[k+1],d=this.index[k+2];if(this.map[a]!==this.map[c]&&this.map[a]!==this.map[d]&&this.map[c]!==this.map[d])triangles.push(a,c,d);}
     return {
       sleeveSupport:this.sleeveSupport,
+      beltVertices:this.beltVertices,
       waist:this.waist,
       upper:this.upper,
       skirt:this.skirt,
@@ -314,6 +322,7 @@ function pants(b:Builder,s:LegsSettings) {
  b.grid({cols:N,rows,wrap:true,at:(i,j)=>point(i,j,pts,s[side].knee),
  restAt:(i,j)=>point(i,j,straight,0),uvAt:(i,j)=>[i/N*2*Math.PI*r,distance(j)],pin:()=>false});
  }
+ for(let side=0;side<2;side++)b.markTubeSeams(side*N*rows,N,rows);
  for(let side=0;side<2;side++)for(let j=1;j<rows;j++)for(let i=0;i<N;i++){const v=(side*N*rows+j*N+i)*2;b.legSkin[v]=side?1:-1;b.legSkin[v+1]=distance(j);b.legAngles[v/2]=i/N*Math.PI*2;}
  // Close the crotch between the two open inner top arcs with shared vertices.
  const base=N*rows;
@@ -363,6 +372,7 @@ export function buildPreset(id: PresetId, pin: PinMode, sleeve: SleeveSettings =
         },
         restAt:(i,j)=>[-.85+distances[j],1.65+offset*Math.max(0,1-distances[j]/.35)+radiusAt(j)*Math.cos(i/N*Math.PI*2),radiusAt(j)*Math.sin(i/N*Math.PI*2)],
         uvAt:(i,j)=>[i/N*2*Math.PI*radius,distances[j]],pin:(_i,j)=>j===0});
+      b.markTubeSeams(0,N,rows);
       break;
     }
     case "two":

@@ -1,6 +1,11 @@
 export const EN: Record<string, string> = Object.fromEntries(`
 Утяжка кольца|Band tension
 Положение кольца|Band position
+Ширина кофты|Shirt width
+Ширина рукавов|Sleeve width
+Кофта с поясом|Belted shirt
+Скрестить ноги|Cross legs
+Потяните стрелку, чтобы изменить позу. Для вращения выберите кольца.|Drag an arrow to pose the limb. Select rotation to use the rings.
 Количество|Quantity
 В группу|Group selection
 Укажите место на манекене|Pick a point on the mannequin

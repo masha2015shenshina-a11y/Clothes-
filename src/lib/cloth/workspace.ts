@@ -299,7 +299,7 @@ export class CompositionWorkspace {
                 Object.assign(i.sim.params, this.colliders);
     }
     select(id: number, part: Part = 'root') { this.pinTool=null;this.pendingPin=null;this.onPinStep?.(false);
-        this.selected = id; this.part = part;if(part!=='root')this.mode='rotate'; this.attach(); this.emit(); this.invalidate(); }
+        this.selected = id; this.part = part;if(part!=='root'||this.items.find(i=>i.id===id)?.kind==='body')this.mode='translate'; this.attach(); this.emit(); this.invalidate(); }
     setMode(mode: 'translate' | 'rotate' | null) { if(mode){this.pinTool=null;this.pendingPin=null;this.onPinStep?.(false);}this.mode = mode;if(mode===null){this.dragging=false;this.gizmo.dragging=false;this.orbit.enabled=true;} this.accumulator=0;this.last=0;this.attach();this.emit();this.invalidate(); }
     private attach() {
         const item = this.items.find(i => i.id === this.selected);
@@ -319,7 +319,7 @@ export class CompositionWorkspace {
         else if(item.kind==='body') {
             const r = item.root, b = item.body, part = this.part, side: Side = part.startsWith('left') ? 'left' : 'right';
             let position: number[] = [r.x, r.y, r.z];
-            this.gizmo.setMode(part === 'root' ? this.mode : 'rotate');
+            this.gizmo.setMode(this.mode);
             if(part.endsWith('Foot')||part.endsWith('Hand')){
                 const foot=part.endsWith('Foot'),mesh=item.meshes[13+(side==='right'?2:0)+Number(foot)];
                 position=(foot?legPoints(r,side):bodyArmPoints(r,b,side))[2];
@@ -340,10 +340,18 @@ export class CompositionWorkspace {
                 position = legPoints(r, side)[part.includes('Knee') ? 1 : 0];
                 this.proxy.rotation.set(rad(part.includes('Knee') ? r[side].knee : r[side].hip), 0, rad(r[side].spread));
             }
-            this.proxy.position.copy(this.worldPoint(item,position));
+            if(this.mode==='translate'&&part!=='root'){
+                if(part==='head'||part==='torso')position=item.meshes[part==='head'?4:2].position.toArray();
+                else{
+                    const arm=/Arm|Elbow|Hand/.test(part),end=/Elbow|Knee|Hand|Foot/.test(part);
+                    position=(arm?bodyArmPoints(r,b,side):legPoints(r,side))[end?2:1];
+                }
+                if(part==='head'||part==='torso')this.proxy.position.fromArray(position);
+                else this.proxy.position.copy(this.worldPoint(item,position));
+            }else this.proxy.position.copy(this.worldPoint(item,position));
             if(item.orientation)this.proxy.quaternion.premultiply(item.orientation);
-            if(part!=='root')this.gizmo.setSpace('local');
-            if (part !== 'root') {
+            if(part!=='root'&&this.mode==='rotate')this.gizmo.setSpace('local');
+            if (part !== 'root'&&this.mode==='rotate') {
                 this.gizmo.showY = part.endsWith('Foot')||part.endsWith('Hand');
                 this.gizmo.showZ = !part.includes('Elbow') && !part.includes('Knee');
             }
@@ -414,6 +422,27 @@ export class CompositionWorkspace {
                 r.y = clamp(this.proxy.position.y, .7, 4);
                 r.z = this.proxy.position.z;
             }
+            else if(this.mode==='translate'){
+                const origin=new T.Vector3(r.x,r.y,r.z);
+                const target=this.proxy.position.clone().sub(origin).applyQuaternion((item.orientation??new T.Quaternion()).clone().invert()).add(origin);
+                if(p==='torso'||p==='head'){
+                    const head=p==='head',base=head?upperTransform([r.x,r.y+1.03,r.z],r,b):[r.x,r.y,r.z];
+                    const dx=target.x-base[0],dy=target.y-base[1],dz=target.z-base[2];
+                    if(head){b.headPitch=clamp(deg(Math.atan2(dz,dy))-b.torsoPitch,-55,55);b.headLean=clamp(deg(Math.atan2(dx,dy))-b.torsoLean,-40,40);}
+                    else{b.torsoPitch=clamp(deg(Math.atan2(dz,dy)),-60,80);b.torsoLean=clamp(deg(Math.atan2(dx,dy)),-45,45);}
+                }else{
+                    const arm=/Arm|Elbow|Hand/.test(p),end=/Elbow|Knee|Hand|Foot/.test(p);
+                    const at=arm?upperTransform(target.toArray(),r,b,true):target.toArray();
+                    const base=arm?[r.x+(side==='left'?-.37:.37),r.y+.8,r.z]:legPoints(r,side)[0];
+                    const a=arm?.63:.85,c=end?(arm?.56:.85):0;
+                    const lateral=clamp((at[0]-base[0])*(side==='left'?-1:1)/(a+c),-.85,.96);
+                    const factor=Math.sqrt(1-lateral*lateral),y=(base[1]-at[1])/factor,z=(at[2]-base[2])/factor;
+                    const bend=c?Math.acos(clamp((y*y+z*z-a*a-c*c)/(2*a*c),-1,1)):0;
+                    const swing=deg(Math.atan2(z,y)+(arm?-1:1)*Math.atan2(c*Math.sin(bend),a+c*Math.cos(bend)));
+                    if(arm){b[side].raise=clamp(deg(Math.asin(lateral)),-10,160);b[side].forward=clamp(swing,-70,150);if(end)b[side].elbow=clamp(deg(bend),0,140);}
+                    else{r[side].spread=clamp(deg(Math.asin(lateral)),-50,75);r[side].hip=clamp(swing,-70,120);if(end)r[side].knee=clamp(deg(bend),0,140);}
+                }
+            }
             else if(p.endsWith('Foot')||p.endsWith('Hand')){
                 item.meshes[13+(side==='right'?2:0)+Number(p.endsWith('Foot'))].userData.pose=new T.Quaternion().setFromEuler(localRotation);
             }
@@ -435,7 +464,7 @@ export class CompositionWorkspace {
                 r[side].knee = clamp(x, 0, 140);
             else {
                 r[side].hip = clamp(x, -70, 120);
-                r[side].spread = clamp(z, -20, 75);
+                r[side].spread = clamp(z, -50, 75);
             }
             this.updateBody(item);
             this.syncBindings();this.refreshColliders();
@@ -454,7 +483,7 @@ export class CompositionWorkspace {
         this.invalidate();
     } }
     remove() { const k = this.items.findIndex(i => i.id === this.selected); if (k < 0)
-        return; this.gizmo.detach(); const i = this.items.splice(k, 1)[0], object = i.kind === 'body' ? i.group : i.mesh; this.scene.remove(object);
+        return; this.gizmo.detach(); const i = this.items.splice(k, 1)[0], object = i.kind === 'body' ? i.group : i.mesh; this.scene.remove(object);this.clothBounds?.delete(i.id);
         if(i.kind==='cloth')this.bindings?.delete(i);
         if(i.kind==='body')for(const [cloth,pins] of this.bindings??[])for(const [index,pin] of pins)if(pin.mesh.parent===object){
             pins.delete(index);cloth.sim.w[index]=cloth.sim.baseW[index]=1;
@@ -478,9 +507,24 @@ export class CompositionWorkspace {
         this.contacts = new GarmentContacts(b, layers);
         this.contactState = { x: new Float32Array(n * 3), p: new Float32Array(n * 3), w: new Float32Array(n), params: this.params('cotton'), upperGuides: null };
     }
+    private clothBounds=new Map<number,T.Box3>();
+    private clothsOverlap(){
+        const bounds:T.Box3[]=[];
+        const point=new T.Vector3();
+        for(const item of this.items)if(item.kind==='cloth'){
+            const box=this.clothBounds.get(item.id)??new T.Box3();
+            box.makeEmpty();
+            for(let o=0;o<item.sim.x.length;o+=3)box.expandByPoint(point.fromArray(item.sim.x,o));
+            box.expandByScalar(.045);
+            this.clothBounds.set(item.id,box);
+            if(bounds.some(other=>other.intersectsBox(box)))return true;
+            bounds.push(box);
+        }
+        return false;
+    }
     private crossContacts() {
         const state = this.contactState;
-        if (!state || !this.contacts)
+        if (!state || !this.contacts || !this.clothsOverlap())
             return;
         let o = 0;
         for (const i of this.items)
@@ -544,7 +588,7 @@ export class CompositionWorkspace {
         const start = performance.now(), dt = 1 / this.pacer.fps, elapsed = this.last ? Math.min(.1, (time - this.last) / 1000) : dt;
         this.last = time;
         let step = false;
-        if (!this.paused && !this.pinTool && this.mode===null && !this.dragging && this.items.some(i => i.kind === 'cloth')) {
+        if (!this.paused && !this.pinTool && this.mode!=='rotate' && this.items.some(i => i.kind === 'cloth')) {
             this.accumulator += elapsed;
             if (this.accumulator >= dt) {
                 this.accumulator = Math.min(dt * .5, this.accumulator - dt);
@@ -575,7 +619,7 @@ export class CompositionWorkspace {
             this.frameCount = 0;
             this.fpsTime = time;
         }
-        if (!this.paused && !this.pinTool && this.mode===null && this.items.some(i => i.kind === 'cloth') || this.dragging)
+        if (!this.raf && ((!this.paused && !this.pinTool && this.mode!=='rotate' && this.items.some(i => i.kind === 'cloth')) || this.dragging))
             this.raf = requestAnimationFrame(this.tick);
     };
     dispose() { this.disposed = true; cancelAnimationFrame(this.raf); this.worker.terminate(); for (const j of this.jobs.values())

@@ -400,6 +400,7 @@ export class ClothEngine {
     const a = (s.windAngle * Math.PI) / 180;
     const box={on:s.box.on,x:s.box.x,y:s.box.y,z:s.box.z,s:s.box.size,width:s.box.width,height:s.box.height,depth:s.box.depth,basis:this.boxBasis(s.box)};
     return {
+      tabletop:s.table?tableParts[0]:undefined,
       boxes:s.table?[...tableParts,box]:undefined,
       shoulder:s.armEnabled?s.sleeve:undefined,
       gravity: s.gravity,
@@ -614,10 +615,17 @@ export class ClothEngine {
     if (this.mesh) { this.scene.remove(this.mesh); this.geom?.dispose(); }
     const g = new THREE.BufferGeometry();
     const rc = build.map.length;
-    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(rc * 3), 3));
-    g.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(rc * 3), 3));
+    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(rc * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(rc * 3), 3).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute("uv", new THREE.BufferAttribute(build.uv, 2));
     g.setIndex(new THREE.BufferAttribute(build.index, 1));
+    if(build.beltVertices?.length){
+      const colors=new Float32Array(rc*3).fill(1);
+      for(const i of build.beltVertices){colors[i*3]=.30;colors[i*3+1]=.24;colors[i*3+2]=.22;}
+      g.setAttribute('color',new THREE.BufferAttribute(colors,3));
+    }
+    this.clothMat.vertexColors=!!build.beltVertices?.length;
+    this.clothMat.needsUpdate=true;
     this.geom = g;
     this.mesh = new THREE.Mesh(g, this.clothMat);
     this.mesh.castShadow = this.mesh.receiveShadow = true;
@@ -902,7 +910,7 @@ export class ClothEngine {
     }else if(kind==="leftLeg"||kind==="rightLeg"){
       const side=kind==="leftLeg"?"left":"right",s=this.settings.legs,a=legPoints(s,side)[0],dy=out.y-a[1],dz=out.z-a[2];
       const reach=Math.min(LEG_SEGMENT*2,Math.hypot(dy,dz)),knee=2*Math.acos(reach/(2*LEG_SEGMENT))*180/Math.PI;
-      const pose={...s[side],spread:THREE.MathUtils.clamp((side==="left"?-1:1)*Math.asin(THREE.MathUtils.clamp((out.x-a[0])/(2*LEG_SEGMENT),-1,1))*180/Math.PI,0,35),knee:Math.min(135,knee),hip:THREE.MathUtils.clamp(Math.atan2(dz,-dy)*180/Math.PI+knee/2,-70,100)};
+      const pose={...s[side],spread:THREE.MathUtils.clamp((side==="left"?-1:1)*Math.asin(THREE.MathUtils.clamp((out.x-a[0])/(2*LEG_SEGMENT),-1,1))*180/Math.PI,-50,55),knee:Math.min(135,knee),hip:THREE.MathUtils.clamp(Math.atan2(dz,-dy)*180/Math.PI+knee/2,-70,100)};
       this.change({legs:{...s,[side]:pose,...(s.linked?{left:pose,right:{...pose}}:{})}});
     }else if(kind==="shoulder"){
       this.change({sleeve:{...this.settings.sleeve,shoulderX:THREE.MathUtils.clamp(out.x,-3,3),shoulderY:THREE.MathUtils.clamp(out.y,.5,3.5),shoulderZ:THREE.MathUtils.clamp(out.z,-3,3)}});

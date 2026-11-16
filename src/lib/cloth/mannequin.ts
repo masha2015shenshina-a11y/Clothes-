@@ -3,7 +3,7 @@ import {jointRows,limbRing} from './jointMesh';
 import type {Builder,LegsSettings,V3} from './presets';
 export type Side='left'|'right';
 export interface ArmPose {raise:number;forward:number;elbow:number;}
-export interface BodySettings {on:boolean;sleeves:boolean;torsoPitch:number;torsoLean:number;headPitch:number;headLean:number;arms:boolean;linked:boolean;left:ArmPose;right:ArmPose;tunic:boolean;length:number;ease:number;cape:boolean;capeLength:number;hood:'up'|'down';}
+export interface BodySettings {sleeveEase?:number;belted?:boolean;on:boolean;sleeves:boolean;torsoPitch:number;torsoLean:number;headPitch:number;headLean:number;arms:boolean;linked:boolean;left:ArmPose;right:ArmPose;tunic:boolean;length:number;ease:number;cape:boolean;capeLength:number;hood:'up'|'down';}
 export const DEFAULT_BODY:BodySettings={on:false,sleeves:false,torsoPitch:0,torsoLean:0,headPitch:0,headLean:0,arms:true,linked:false,left:{raise:12,forward:0,elbow:12},right:{raise:12,forward:0,elbow:12},tunic:true,length:1.05,ease:.045,cape:false,capeLength:1.5,hood:'down'};
 export const UPPER_ARM=.63,FOREARM=.56,BODY_ARM_RADIUS=.09;
 export function bodyArmPoints(root:LegsSettings,body:BodySettings,side:Side):[V3,V3,V3]{
@@ -41,14 +41,40 @@ export function addUpperGarments(b:Builder,s:BodySettings,r:LegsSettings){
  if(!s.on)return;
  const upperStart=b.pos.length/3;let capeStart=-1,hoodStart=-1,sleevesStart=-1;
  const top=r.y+.90;
+ const armholes:number[][]=[[],[]];
+ const beltDrop=Math.min(.60,s.length*.65);
  const sleeveCols=20,sleeveDistances=jointRows(UPPER_ARM+FOREARM-.06,17,[[.10,.12],[UPPER_ARM,.18]],6);
  if(s.tunic){
  const columns=Array.from({length:21},(_,i)=>(i-10)/10).concat([-.95,-.85,.85,.95]).sort((a,b)=>a-b);
  const drops=jointRows(s.length,b.resolution(Math.ceil(s.length/.10)+1),[[.16,.20]],4);
+ if(s.belted){
+   for(const offset of [-.055,-.035,.035,.055])if(!drops.some(d=>Math.abs(d-beltDrop-offset)<.004))drops.push(beltDrop+offset);
+   drops.sort((a,b)=>a-b);
+ }
+ const renderStart=b.map.length;
  const C=columns.length,R=drops.length,base=b.pos.length/3,w=.385,depth=.25;
  for(const face of [1,-1])b.grid({cols:C,rows:R,wrap:false,at:(i,j)=>{
  const p=tunicPanel(columns[i],drops[j],s.length,s.ease,face);
- return [r.x+p[0],top+p[1],r.z+p[2]];},uvAt:(i,j)=>[(columns[i]+1)/2,drops[j]],pin:(_i,j)=>j===0});
+ if(s.belted){
+   const weight=Math.exp(-(((drops[j]-beltDrop)/.09)**4));
+   const radius=.26+.014*Math.cos(columns[i]*Math.PI*5)*(1-weight);
+   p[0]+=(columns[i]*radius-p[0])*weight;
+   p[2]+=(face*.19*Math.sqrt(Math.max(0,1-columns[i]**2))-p[2])*weight;
+ }
+ return [r.x+p[0],top+p[1],r.z+p[2]];},uvAt:(i,j)=>[(columns[i]+1)/2,drops[j]],pin:(i,j)=>j===0&&Math.abs(columns[i])>=.58});
+ if(s.belted){
+   b.beltVertices=[];
+   for(let side=0;side<2;side++)for(let j=0;j<R;j++)if(Math.abs(drops[j]-beltDrop)<=.04)for(let i=0;i<C;i++){
+      const index=side*C*R+j*C+i;
+      b.seam[base+index]=1;b.beltVertices.push(renderStart+index);
+   }
+ }
+ const underarm=drops.findIndex(d=>d>.28);
+ for(let side=0;side<2;side++){
+   const edge=side?C-1:0;
+   for(let j=0;j<=underarm;j++)armholes[side].push(renderStart+j*C+edge);
+   for(let j=underarm-1;j>0;j--)armholes[side].push(renderStart+C*R+j*C+edge);
+ }
  for(let i=base;i<b.pinned.length;i++)b.locked[i]=b.pinned[i];
  const weld=new Map<number,number>();
  for(let j=0;j<R;j++)if(drops[j]>.28)for(const i of [0,C-1]){weld.set(base+C*R+j*C+i,base+j*C+i);b.seam[base+j*C+i]=1;}
@@ -88,17 +114,35 @@ export function addUpperGarments(b:Builder,s:BodySettings,r:LegsSettings){
  sleevesStart=b.pos.length/3;
  const neutral={...s,torsoPitch:0,torsoLean:0};
  for(const side of ['left','right'] as const){const points=bodyArmPoints(r,neutral,side),start=b.pos.length/3,N=sleeveCols,R=sleeveDistances.length;
+ const renderStart=b.map.length;
  const rings=sleeveDistances.map(d=>sleeveRing(points,d,s[side],side));
  b.grid({cols:N,rows:R,wrap:true,at:(i,j)=>{const d=sleeveDistances[j],ring=rings[j],angle=i/N*Math.PI*2;
  const bend=.025*Math.sin(s[side].elbow*Math.PI/360)*Math.exp(-(((d-UPPER_ARM)/.16)**2));
- const rad=.115+s.ease*.25+bend;
+ const taper=1-.16*Math.min(1,d/(UPPER_ARM+FOREARM));
+ const rad=BODY_ARM_RADIUS+.012+(s.sleeveEase??.045)*taper+bend;
  return ring.center.map((q,k)=>q+rad*(ring.radial[k]*Math.cos(angle)+ring.normal[k]*Math.sin(angle))) as V3;},uvAt:(i,j)=>[i/N,sleeveDistances[j]],pin:()=>false});
- // Sew the sleeve mouth to the tunic instead of rotating a fixed ring through the chest.
- const tunicEnd=capeStart>=0?capeStart:sleevesStart;
- for(let i=start;i<start+N;i++){
-  const o=i*3;let nearest=upperStart,best=Infinity;
-  for(let k=upperStart;k<tunicEnd;k++){const q=k*3,dx=b.pos[o]-b.pos[q],dy=b.pos[o+1]-b.pos[q+1],dz=b.pos[o+2]-b.pos[q+2],d=dx*dx+dy*dy+dz*dz;if(d<best){best=d;nearest=k;}}
-  b.cons.push(i,nearest);b.ctype.push(3);b.seam[i]=b.seam[nearest]=1;
+ b.markTubeSeams(start,N,R);
+ // Bridge the actual armhole boundary to the sleeve cap. Both edges share
+ // simulation particles with their panels, so the armhole stays closed in motion.
+ const hole=armholes[side==='left'?0:1],H=hole.length;
+ const dist=(a:number,c:number)=>{
+   const i=b.map[a]*3,j=b.map[c]*3;
+   return (b.pos[i]-b.pos[j])**2+(b.pos[i+1]-b.pos[j+1])**2+(b.pos[i+2]-b.pos[j+2])**2;
+ };
+ let best=Infinity,phase=0,direction=1;
+ for(const sign of [-1,1])for(let h=0;h<H;h++){
+   let cost=0;
+   for(let j=0;j<N;j++)cost+=dist(renderStart+j,hole[(h+H+sign*Math.floor(j*H/N))%H]);
+   if(cost<best){best=cost;phase=h;direction=sign;}
+ }
+ const rim=(j:number)=>hole[(phase+2*H+direction*j)%H];
+ const cuff=(j:number)=>renderStart+j%N;
+ const stitch=(a:number,c:number)=>{b.cons.push(b.map[a],b.map[c]);b.ctype.push(3);};
+ let h=0,j=0;
+ while(h<H||j<N){
+    const a=rim(h),c=cuff(j);stitch(a,c);
+    if(j===N||(h+1)/H<(j+1)/N){b.index.push(a,rim(h+1),c);h++;}
+    else{b.index.push(a,cuff(j+1),c);j++;}
  }
 
  }

@@ -2,6 +2,7 @@ import { Matrix4, Quaternion, Vector3 } from 'three';
 import { bodyArmPoints, upperTransform, rotateUpper, sleeveRing, type BodySettings } from './mannequin';
 import type { ClothBuild, LegsSettings, V3 } from './presets';
 import type { ClothSim } from './solver';
+const BODY_CUFF_RADIUS=.102;
 function armMatrices(root: LegsSettings, from: BodySettings, to: BodySettings) {
     const result: Matrix4[] = [];
     for (const side of ['left', 'right'] as const) {
@@ -83,11 +84,16 @@ export function updateUpperGuides(sim: ClothSim, build: ClothBuild, root: LegsSe
                 g[o + k] = p[seg][k] + (p[seg + 1][k] - p[seg][k]) * t;
             const elbow=body[offset<count?"left":"right"].elbow*Math.PI/180;
             const bendAllowance=.10*Math.sin(elbow/2)*Math.exp(-(((d-.63)/.18)**2));
-            g[o + 3] = .15 + body.ease * .25 + bendAllowance;
+            g[o + 3] = .14 + (body.sleeveEase??.045) + bendAllowance;
             const row=Math.floor(offset%count/m.sleeveCols),ring=rings[offset<count?0:1][row],angle=offset%m.sleeveCols/m.sleeveCols*Math.PI*2;
             const direction=ring.radial.map((v,k)=>v*Math.cos(angle)+ring.normal[k]*Math.sin(angle)) as V3;
             const normal=rotateUpper(direction,body.torsoPitch,body.torsoLean),k=i*7;
             sectors[k]=g[o];sectors[k+1]=g[o+1];sectors[k+2]=g[o+2];
             sectors[k+3]=normal[0];sectors[k+4]=normal[1];sectors[k+5]=normal[2];sectors[k+6]=.04;
+            if(row===m.sleeveDistances.length-1){
+                const radius=BODY_CUFF_RADIUS+(body.sleeveEase??.045)*.84;
+                for(let axis=0;axis<3;axis++)g[o+axis]+=normal[axis]*radius;
+                g[o+3]=.04+(body.sleeveEase??.045)*.4;
+            }
         }
 }

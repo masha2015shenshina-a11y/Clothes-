@@ -14,6 +14,10 @@ export function updateLegGuides(sim:ClothSim,build:ClothBuild,pose:LegsSettings,
  const k=i*7;sectors[k]=g[o];sectors[k+1]=g[o+1];sectors[k+2]=g[o+2];
  for(let axis=0;axis<3;axis++)sectors[k+3+axis]=ring.radial[axis]*Math.cos(angle)+ring.normal[axis]*Math.sin(angle);
  sectors[k+6]=LEG_RADIUS*.3;
+ if(Math.abs(d-pose.length)<.002){
+   for(let axis=0;axis<3;axis++)g[o+axis]+=(LEG_RADIUS+pose.ease)*sectors[k+3+axis];
+   g[o+3]=.045+pose.ease*.5;
+ }
  }
 
 }

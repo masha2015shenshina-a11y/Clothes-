@@ -84,7 +84,7 @@ export class RotationTool {
             if(k==='torso'||k==='head'){
                 e.change({body:{...body,[k+'Pitch']:clamp(x,-55,65),[k+'Lean']:clamp(-z,-40,40)}});
             }else if(k.endsWith('Leg')){
-                const next={...legs[side],hip:clamp(x,-70,120),spread:clamp(z,-20,75)};
+                const next={...legs[side],hip:clamp(x,-70,120),spread:clamp(z,-50,75)};
                 e.change({legs:{...legs,[side]:next,...(legs.linked?{left:next,right:{...next}}:{})}});
             }else{
                 const next={...body[side],forward:clamp(x,-70,150),raise:clamp(z,-10,160)};
