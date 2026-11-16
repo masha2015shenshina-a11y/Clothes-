@@ -1,4 +1,5 @@
 import {makeTable,tableParts,carryContact,downloadFrame} from './studioTools';
+import {RaisedSeam} from './raisedSeam';
 import {ContourView} from './contour';
 import {updateSoloSleeve,followSoloSleeve} from './soloSleeve';
 import { t as translate } from '../i18n';
@@ -162,6 +163,7 @@ export class ClothEngine {
   sim: ClothSim | null = null;
   build: ClothBuild | null = null;
   mesh: THREE.Mesh | null = null;
+  private crotchSeam?:RaisedSeam;
   geom: THREE.BufferGeometry | null = null;
   clothMat: THREE.MeshPhysicalMaterial;
   pins: THREE.Points;
@@ -556,7 +558,7 @@ export class ClothEngine {
     if (!tex) { tex = weaveTexture(M.weave); this.textures.set(M.weave, tex); }
     tex.repeat.set(M.texScale, M.texScale);
     const m = this.clothMat;
-    m.color.set(s.color);
+    m.color.set(s.color);this.crotchSeam?.tint(s.color);
     m.roughness = M.roughness;
     m.sheen = M.sheen;
     m.sheenRoughness = s.material === "silk" ? 0.55 : 0.8;
@@ -612,6 +614,7 @@ export class ClothEngine {
     updateUpperGuides(this.sim,build,this.settings.legs,this.bodyPose);
     if(this.settings.armEnabled)updateSoloSleeve(this.sim,{...this.settings.sleeve,angle:this.armAngle});
     {const r=this.settings.legs;this.sim.waist?.setPose(r.x,r.y,r.z,this.settings.body.on?this.bodyPose.torsoPitch:0,this.settings.body.on?this.bodyPose.torsoLean:0);}
+    this.crotchSeam?.dispose();this.crotchSeam=undefined;
     if (this.mesh) { this.scene.remove(this.mesh); this.geom?.dispose(); }
     const g = new THREE.BufferGeometry();
     const rc = build.map.length;
@@ -630,6 +633,7 @@ export class ClothEngine {
     this.mesh = new THREE.Mesh(g, this.clothMat);
     this.mesh.castShadow = this.mesh.receiveShadow = true;
     this.mesh.frustumCulled = false;
+    if(build.crotchPath?.length){this.crotchSeam=new RaisedSeam(build.crotchPath,this.settings.color);this.mesh.add(this.crotchSeam);}
     this.scene.add(this.mesh);
     this.acc = 0;
     this.rebuildPinGroups();
@@ -650,6 +654,7 @@ export class ClothEngine {
     const { x } = this.sim;
     this.sim.computeNormals(true);
     const nr = this.sim.nrm;
+    this.crotchSeam?.update(x,nr);
     const map = this.build.map;
     for (let r = 0; r < map.length; r++) {
       const o = map[r] * 3, t = r * 3;

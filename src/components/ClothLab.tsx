@@ -261,7 +261,7 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
       }catch{fail();}
     },60);
     return ()=>{cancelled=true;clearTimeout(timer);cancelAnimationFrame(finishFrame);};
-  }, [sheet.width,sheet.length,quality,preset, pin, resetTick, glError, sleeve.length, sleeve.ease,sleeve.mouth,sleeve.cuff,sleeve.bandPosition,sleeve.bandFit,legs.bandPosition,legs.bandFit,legs.belt,legs.beltHeight, skirt.length,skirt.width,skirt.style,skirt.folds,legs.length,legs.ease,body.on,body.sleeves,body.sleeveEase,body.belted,body.arms,body.tunic,body.length,body.ease,body.cape,body.capeLength,body.hood]);
+  }, [sheet.width,sheet.length,quality,preset, pin, resetTick, glError, sleeve.length, sleeve.ease,sleeve.mouth,sleeve.cuff,sleeve.bandPosition,sleeve.bandFit,legs.bandPosition,legs.bandFit,legs.belt,legs.beltHeight, skirt.length,skirt.width,skirt.style,skirt.folds,legs.length,legs.ease,body.on,body.sleeves,body.sleeveEase,body.cuff,body.belted,body.arms,body.tunic,body.length,body.ease,body.cape,body.capeLength,body.hood]);
 
   const choosePreset = (id: PresetId) => {
     setRotateMode(null);engineRef.current?.setRotationMode(null);
@@ -437,6 +437,7 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
             </Section>
             <Section title="Одежда туловища">
               <div className="grid grid-cols-3 gap-1">{tr(([{key:"tunic",label:"Кофта"},{key:"sleeves",label:"Рукава"},{key:"cape",label:"Плащ"}] as const).map(item=><button className="lab-btn" key={item.key} aria-pressed={body[item.key]} data-selected={body[item.key]} onClick={()=>setBody({...body,[item.key]:!body[item.key],...(item.key==="sleeves"&&!body.sleeves?{tunic:true,arms:true}:{})})}>{tr(item.label)}</button>))}</div>
+              {body.sleeves&&<Slider label="Манжета" value={body.cuff??.35} min={0} max={1.4} step={.01} unit="×" onChange={cuff=>setBody({...body,cuff})}/>}
               {body.sleeves&&<Slider label="Ширина рукавов" value={body.sleeveEase??.045} min={.012} max={.22} step={.005} unit=" м" onChange={sleeveEase=>setBody({...body,sleeveEase})}/>}
               {body.tunic&&<button className="lab-btn" aria-pressed={!!body.belted} data-selected={!!body.belted} onClick={()=>setBody({...body,belted:!body.belted})}>{tr("Кофта с поясом")}</button>}
               {tr(body.tunic&&<><Slider label="Длина кофты" value={body.length} min={.45} max={1.8} step={.01} unit=" м" onChange={length=>setBody({...body,length})}/><Slider label="Ширина кофты" value={body.ease} min={.025} max={.28} step={.005} unit=" м" onChange={ease=>setBody({...body,ease})}/></>)}
@@ -459,8 +460,8 @@ export function ClothLab({active=true,onWorkspace}:{active?:boolean;onWorkspace?
             <Slider label="Плечевое кольцо" value={sleeve.mouth??1} min={.8} max={1.6} step={.02} unit="×" onChange={mouth=>setSleeve({...sleeve,mouth})}/>
             <Slider label="Утяжка кольца" value={sleeve.bandFit??0} min={0} max={1} step={.02} onChange={bandFit=>setSleeve({...sleeve,bandFit})}/>
             {(sleeve.bandFit??0)>0&&<Slider label="Положение кольца" value={(sleeve.bandPosition??.6)*100} min={10} max={95} step={1} unit="%" digits={0} onChange={v=>setSleeve({...sleeve,bandPosition:v/100})}/>}
-            <Slider label="Манжета" value={sleeve.cuff??1} min={.85} max={1.8} step={.02} unit="×" onChange={cuff=>setSleeve({...sleeve,cuff})}/>
-            <Slider label="Длина" value={sleeve.length} min={.5} max={2.1} step={.01} unit=" м" onChange={length=>setSleeve({...sleeve,length})}/>
+            <Slider label="Манжета" value={sleeve.cuff??.35} min={0} max={1.4} step={.02} unit="×" onChange={cuff=>setSleeve({...sleeve,cuff})}/>
+            <Slider label="Длина кроя" value={sleeve.length} min={1.7} max={2.1} step={.01} unit=" м" onChange={length=>setSleeve({...sleeve,length})}/>
             <Slider label="Свобода облегания" value={sleeve.ease} min={.04} max={.35} step={.01} unit=" м" onChange={ease=>setSleeve({...sleeve,ease})}/>
             <Slider label="Локоть" value={sleeve.angle} min={-65} max={140} step={1} digits={0} unit="°" onChange={angle=>setSleeve({...sleeve,angle})}/>
           </Section>)}

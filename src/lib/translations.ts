@@ -1,6 +1,7 @@
 export const EN: Record<string, string> = Object.fromEntries(`
 Утяжка кольца|Band tension
 Положение кольца|Band position
+Длина кроя|Pattern length
 Ширина кофты|Shirt width
 Ширина рукавов|Sleeve width
 Кофта с поясом|Belted shirt

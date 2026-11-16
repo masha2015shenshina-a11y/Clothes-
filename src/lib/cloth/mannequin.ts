@@ -1,9 +1,9 @@
-import {neckline,tunicPanel,capeProfile} from './garmentProfile';
+import {neckline,tunicPanel,capeProfile,sleeveRadius,wristRadius} from './garmentProfile';
 import {jointRows,limbRing} from './jointMesh';
 import type {Builder,LegsSettings,V3} from './presets';
 export type Side='left'|'right';
 export interface ArmPose {raise:number;forward:number;elbow:number;}
-export interface BodySettings {sleeveEase?:number;belted?:boolean;on:boolean;sleeves:boolean;torsoPitch:number;torsoLean:number;headPitch:number;headLean:number;arms:boolean;linked:boolean;left:ArmPose;right:ArmPose;tunic:boolean;length:number;ease:number;cape:boolean;capeLength:number;hood:'up'|'down';}
+export interface BodySettings {sleeveEase?:number;cuff?:number;belted?:boolean;on:boolean;sleeves:boolean;torsoPitch:number;torsoLean:number;headPitch:number;headLean:number;arms:boolean;linked:boolean;left:ArmPose;right:ArmPose;tunic:boolean;length:number;ease:number;cape:boolean;capeLength:number;hood:'up'|'down';}
 export const DEFAULT_BODY:BodySettings={on:false,sleeves:false,torsoPitch:0,torsoLean:0,headPitch:0,headLean:0,arms:true,linked:false,left:{raise:12,forward:0,elbow:12},right:{raise:12,forward:0,elbow:12},tunic:true,length:1.05,ease:.045,cape:false,capeLength:1.5,hood:'down'};
 export const UPPER_ARM=.63,FOREARM=.56,BODY_ARM_RADIUS=.09;
 export function bodyArmPoints(root:LegsSettings,body:BodySettings,side:Side):[V3,V3,V3]{
@@ -43,7 +43,7 @@ export function addUpperGarments(b:Builder,s:BodySettings,r:LegsSettings){
  const top=r.y+.90;
  const armholes:number[][]=[[],[]];
  const beltDrop=Math.min(.60,s.length*.65);
- const sleeveCols=20,sleeveDistances=jointRows(UPPER_ARM+FOREARM-.06,17,[[.10,.12],[UPPER_ARM,.18]],6);
+ const sleeveCols=20,sleeveDistances=jointRows(UPPER_ARM+FOREARM,17,[[.10,.12],[UPPER_ARM,.18]],6);
  if(s.tunic){
  const columns=Array.from({length:21},(_,i)=>(i-10)/10).concat([-.95,-.85,.85,.95]).sort((a,b)=>a-b);
  const drops=jointRows(s.length,b.resolution(Math.ceil(s.length/.10)+1),[[.16,.20]],4);
@@ -118,8 +118,8 @@ export function addUpperGarments(b:Builder,s:BodySettings,r:LegsSettings){
  const rings=sleeveDistances.map(d=>sleeveRing(points,d,s[side],side));
  b.grid({cols:N,rows:R,wrap:true,at:(i,j)=>{const d=sleeveDistances[j],ring=rings[j],angle=i/N*Math.PI*2;
  const bend=.025*Math.sin(s[side].elbow*Math.PI/360)*Math.exp(-(((d-UPPER_ARM)/.16)**2));
- const taper=1-.16*Math.min(1,d/(UPPER_ARM+FOREARM));
- const rad=BODY_ARM_RADIUS+.012+(s.sleeveEase??.045)*taper+bend;
+ const mouth=BODY_ARM_RADIUS+.012+(s.sleeveEase??.045);
+ const rad=sleeveRadius(mouth,wristRadius(BODY_ARM_RADIUS,mouth,s.cuff),d/(UPPER_ARM+FOREARM))+bend;
  return ring.center.map((q,k)=>q+rad*(ring.radial[k]*Math.cos(angle)+ring.normal[k]*Math.sin(angle))) as V3;},uvAt:(i,j)=>[i/N,sleeveDistances[j]],pin:()=>false});
  b.markTubeSeams(start,N,R);
  // Bridge the actual armhole boundary to the sleeve cap. Both edges share

@@ -64,6 +64,7 @@ export class ClothSim {
   selfSpacing: Float32Array;
   locked: Uint8Array;
   legGuides:Float32Array|null=null;
+  private wristRows:{start:number;count:number}[]=[];
   upperGuides:Float32Array|null=null;
   upperSectors:Float32Array|null=null;
   legSectors:Float32Array|null=null;
@@ -86,6 +87,11 @@ export class ClothSim {
     this.n = b.x.length / 3;
     if(b.upper||b.sleeveSupport||b.waist)this.thickness=.009;
     this.sleeveSupport=b.sleeveSupport;
+    if(b.sleeveSupport)this.wristRows.push({start:this.n-b.sleeveSupport.count,count:b.sleeveSupport.count});
+    if(b.upper&&b.upper.sleevesStart>=0){
+      const {sleevesStart,sleeveCols,sleeveDistances}=b.upper,stride=sleeveCols*sleeveDistances.length;
+      for(let arm=1;arm<=2;arm++)this.wristRows.push({start:sleevesStart+arm*stride-sleeveCols,count:sleeveCols});
+    }
     if(b.waist)this.waist=new WaistSupport(b.waist);
     this.strainEnd=(b.upper?.capeStart??-1)>=0?b.upper!.capeStart:(b.upper?.sleevesStart??-1)>=0?b.upper!.sleevesStart:this.n;
     if(b.upper&&b.upper.capeStart>b.upper.start)this.garmentContacts=new GarmentContacts(b);
@@ -159,6 +165,14 @@ export class ClothSim {
       if(this.garmentContacts&&(s===3||s===this.substeps-1)){this.garmentContacts.solve(this);this.collide();}
       if(s===this.substeps-1&&((this.params.capsules?.length??0)||(this.params.ellipsoids?.length??0))){for(let pass=0;pass<3;pass++){this.surfaceContacts.solve(this);this.limitContactStretch();this.waist?.solve(this,h);this.collide();if(this.surfaceContacts.maxPenetration<.004)break;}}
       if(s===3||s===this.substeps-1){const boxes=this.params.boxes;for(let k=0;k<(boxes?.length??1);k++){const box=boxes?boxes[k]:this.params.box;if(!box.on)continue;for(let pass=0;pass<3;pass++){const depth=this.boxContacts.solve(this,box);if(depth>0)this.collide();if(depth<.002)break;}}}
+      // The wrist band is fitted to a moving joint; solve it after contact
+      // strain limiting, which can otherwise pull the hem down the forearm.
+      if(this.upperGuides)for(const {start,count} of this.wristRows){
+        for(let i=start;i<start+count;i++){
+          if(!this.w[i]||!this.upperGuides[4*i+3])continue;
+          for(let k=0;k<3;k++)this.x[3*i+k]=this.p[3*i+k]=this.upperGuides[4*i+k];
+        }
+      }
       if(this.params.tabletop)this.holdTabletop(this.params.tabletop,h);
       // Constraint/contact corrections must not become an unbounded Verlet impulse.
       const limit=25*h;

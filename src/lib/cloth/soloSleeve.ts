@@ -1,4 +1,5 @@
 import {armPoints,armTransform,ARM_RADIUS,type SleeveSettings} from './presets';
+import {wristRadius} from './garmentProfile';
 import {limbRing} from './jointMesh';
 import type {ClothSim} from './solver';
 /** Update only when the arm pose changes, never in the per-particle collision loop. */
@@ -19,9 +20,9 @@ export function updateSoloSleeve(sim:ClothSim,pose:SleeveSettings){
    for(let k=0;k<3;k++){guides[g+k]=sectors[s+k]=ring.center[k];sectors[s+3+k]=ring.radial[k]*Math.cos(a)+ring.normal[k]*Math.sin(a);}
    guides[g+3]=allowance;sectors[s+6]=ARM_RADIUS*.3;
    if(cuff){
-     const radius=(ARM_RADIUS+pose.ease)*(pose.cuff??1);
+     const radius=wristRadius(ARM_RADIUS,meta.radius,pose.cuff);
      for(let axis=0;axis<3;axis++)guides[g+axis]+=radius*sectors[s+3+axis];
-     guides[g+3]=.045+pose.ease*.45+Math.max(0,d-1.7);
+     guides[g+3]=.004;
    }
   }
  }

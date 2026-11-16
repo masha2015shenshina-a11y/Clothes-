@@ -39,3 +39,39 @@ for(const material of ['cotton','silk']){
   console.log(material,{supported,particles:sim.n,drift});
   assert(!sim.hasNaN()&&supported>sim.n*.10&&drift<.10);
 }
+
+// The pattern length changes the available cloth. The hem remains on the wrist.
+const {DEFAULT_SLEEVE,armPoints}=loadPhysics('presets');
+const {updateSoloSleeve}=loadPhysics('soloSleeve');
+for(const length of [1.7,2.1]){
+  const pose={...DEFAULT_SLEEVE,length,ease:.22,cuff:.2,angle:85};
+  const build=buildPreset('sleeve','top',pose);
+  const sim=new ClothSim(build,{...MATERIALS.silk,gravity:9.81,stretch:0,windStrength:3,windX:0,windZ:1,shoulder:pose,box:off,sphere:off});
+  const [a,b,wrist]=armPoints(pose.angle,pose);
+  sim.params.capsules=[{a,b,r:.13},{a:b,b:wrist,r:.13}];
+  updateSoloSleeve(sim,pose);
+  for(let i=0;i<24;i++)sim.step(1/30);
+  const center=[0,0,0],count=build.sleeveSupport.count;
+  for(let i=sim.n-count;i<sim.n;i++)for(let k=0;k<3;k++)center[k]+=sim.x[i*3+k]/count;
+  const error=Math.hypot(...center.map((v,k)=>v-wrist[k]));
+  assert(error<.012,'Cuff center must track wrist with extra cloth: '+error);
+  console.log('Wrist offset (m)',length,error);
+}
+const pants=buildPreset('pants','top',undefined,undefined,legs);
+assert(pants.crotchPath.length>=9);
+assert.equal(new Set(pants.crotchPath).size,pants.crotchPath.length);
+for(const id of pants.crotchPath)assert(id>=0&&id<pants.pinned.length);
+const {bodyArmPoints}=loadPhysics('mannequin');
+const {updateUpperGuides}=loadPhysics('upperCloth');
+const body={...shirt,torsoLean:18,left:{forward:40,raise:45,elbow:95},cuff:0};
+const worn=buildPreset('body','top',undefined,undefined,legs,body,.6);
+const sleeveSim=new ClothSim(worn,{...MATERIALS.silk,stretch:0,gravity:9.81,windStrength:0,windX:0,windZ:1,box:off,sphere:off});
+updateUpperGuides(sleeveSim,worn,legs,body);
+sleeveSim.step(1/30);
+for(const [arm,side] of ['left','right'].entries()){
+  const wrist=bodyArmPoints(legs,body,side)[2],m=worn.upper;
+  const start=m.sleevesStart+(arm+1)*m.sleeveCols*m.sleeveDistances.length-m.sleeveCols;
+  const center=[0,0,0];
+  for(let i=start;i<start+m.sleeveCols;i++)for(let k=0;k<3;k++)center[k]+=sleeveSim.x[3*i+k]/m.sleeveCols;
+  assert(Math.hypot(...center.map((v,k)=>v-wrist[k]))<.001);
+}

@@ -1,3 +1,4 @@
+import {sleeveRadius,wristRadius} from "./garmentProfile";
 import {jointRows,limbRing} from './jointMesh';
 import {addUpperGarments,DEFAULT_BODY,type BodySettings} from "./mannequin";
 export type PinMode = "two" | "one" | "top" | "none";
@@ -37,7 +38,7 @@ export interface PresetDef {
 const boxOff: ColliderState = { on: false, x: 0.9, y: 0.35, z: 0.5, size: 0.7 };
 
 export interface SleeveSettings { mouth?:number;cuff?:number;bandPosition?:number;bandFit?:number; length: number; ease: number; angle: number; shoulderX?:number; shoulderY?:number; shoulderZ?:number; shoulderPitch?:number; shoulderYaw?:number; }
-export const DEFAULT_SLEEVE: SleeveSettings = {length: 1.65, ease: 0.10, angle: 35, shoulderX:-.85,shoulderY:1.65,shoulderZ:0,shoulderPitch:0,shoulderYaw:0};
+export const DEFAULT_SLEEVE: SleeveSettings = {length: 1.7, ease: 0.10, angle: 35, shoulderX:-.85,shoulderY:1.65,shoulderZ:0,shoulderPitch:0,shoulderYaw:0};
 export const ARM_RADIUS = 0.13;
 export const ARM_SEGMENT = 0.85;
 export function armTransform(p: number[],s: SleeveSettings,inverse=false): V3 {
@@ -92,6 +93,7 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
 export interface WaistBuild {kind:'pants'|'skirt';indices:Uint32Array;reference:Float32Array;origin:V3;}
 export interface ClothBuild {
   sleeveSupport?: {count:number;radius:number;offset:number;distances:number[]};
+  crotchPath?:number[];
   beltVertices?: number[];
   waist?: WaistBuild;
   upper?: {start:number;capeStart:number;hoodStart:number;sleevesStart:number;sleeveCols:number;sleeveDistances:number[];reference:Float32Array};
@@ -127,6 +129,7 @@ export class Builder {
   upper?: ClothBuild["upper"];
   skirt?: ClothBuild["skirt"];
   sleeveSupport?: {count:number;radius:number;offset:number;distances:number[]};
+  crotchPath?:number[];
   beltVertices?: number[];
   waist?: WaistBuild;
   seam: number[] = [];
@@ -218,6 +221,7 @@ export class Builder {
     for(let k=0;k<this.index.length;k+=3){const a=this.index[k],c=this.index[k+1],d=this.index[k+2];if(this.map[a]!==this.map[c]&&this.map[a]!==this.map[d]&&this.map[c]!==this.map[d])triangles.push(a,c,d);}
     return {
       sleeveSupport:this.sleeveSupport,
+      crotchPath:this.crotchPath,
       beltVertices:this.beltVertices,
       waist:this.waist,
       upper:this.upper,
@@ -349,6 +353,7 @@ function pants(b:Builder,s:LegsSettings) {
  const remap=(i:number)=>map.get(weld.get(i)??i)!;
  b.cons=b.cons.map(remap);b.map=b.map.map(remap);
  b.pos=keep.flatMap(i=>b.pos.slice(i*3,i*3+3));b.pinned=keep.map(i=>b.pinned[i]);b.locked=keep.map(i=>b.locked[i]);b.legSkin=keep.flatMap(i=>b.legSkin.slice(i*2,i*2+2));b.legAngles=keep.map(i=>b.legAngles[i]);b.seam=keep.map(i=>b.seam[i]);b.restPos=keep.flatMap(i=>b.restPos.slice(i*3,i*3+3));
+ b.crotchPath=Array.from({length:N/2+1},(_,i)=>remap((3*N/4+i)%N));
  const indices=Uint32Array.from(new Set(waistIndices.map(remap)));
  b.waist={kind:'pants',indices,reference:Float32Array.from(Array.from(indices).flatMap(i=>[b.pos[i*3]-s.x,b.pos[i*3+1]-s.y,b.pos[i*3+2]-s.z])),origin:[s.x,s.y,s.z]};
 }
@@ -360,9 +365,15 @@ export function buildPreset(id: PresetId, pin: PinMode, sleeve: SleeveSettings =
   switch (id) {
     case "body": break;
     case "sleeve": {
-      const N=b.resolution(36,4), distances=jointRows(sleeve.length,b.resolution(Math.ceil(sleeve.length/.045)+1),[[.85,.2]],6), rows=distances.length, radius=Math.max(ARM_RADIUS+.025,ARM_RADIUS+sleeve.ease);
+      const armLength=1.7,cutLength=Math.max(armLength,sleeve.length);
+      const N=b.resolution(36,4), distances=jointRows(armLength,b.resolution(Math.ceil(sleeve.length/.045)+1),[[.85,.2]],6), rows=distances.length, radius=Math.max(ARM_RADIUS+.025,ARM_RADIUS+sleeve.ease);
       const shoulderRadius=Math.max(ARM_RADIUS+.025,radius*(sleeve.mouth??1)),offset=ARM_RADIUS+.025-shoulderRadius;
-      const radiusAt=(j:number)=>{const d=distances[j],band=(sleeve.bandFit??0)*Math.exp(-(((d/sleeve.length-(sleeve.bandPosition??.6))/.075)**2));return radius-(radius-ARM_RADIUS-.02)*band+(shoulderRadius-radius)*Math.max(0,1-d/.35)+radius*((sleeve.cuff??1)-1)*Math.max(0,1-(sleeve.length-d)/.32);};
+      const cuff=wristRadius(ARM_RADIUS,shoulderRadius,sleeve.cuff);
+      const radiusAt=(j:number)=>{
+        const t=distances[j]/armLength,r=sleeveRadius(shoulderRadius,cuff,t);
+        const band=(sleeve.bandFit??0)*Math.exp(-(((t-(sleeve.bandPosition??.6))/.075)**2))*Math.sin(Math.PI*t)**2;
+        return r-Math.max(0,r-ARM_RADIUS-.02)*band;
+      };
       const rings=distances.map(d=>limbRing(armPoints(sleeve.angle,{...DEFAULT_SLEEVE}),d,.85,.85,.16));
       b.sleeveSupport={count:N,radius:shoulderRadius,offset,distances};
       b.grid({cols:N,rows,wrap:true,
@@ -370,7 +381,7 @@ export function buildPreset(id: PresetId, pin: PinMode, sleeve: SleeveSettings =
           const ring=rings[j],phi=i/N*Math.PI*2,shift=offset*Math.max(0,1-distances[j]/.35);
           return armTransform(ring.center.map((v,k)=>v+ring.radial[k]*(radiusAt(j)*Math.cos(phi)+shift)+ring.normal[k]*radiusAt(j)*Math.sin(phi)),sleeve);
         },
-        restAt:(i,j)=>[-.85+distances[j],1.65+offset*Math.max(0,1-distances[j]/.35)+radiusAt(j)*Math.cos(i/N*Math.PI*2),radiusAt(j)*Math.sin(i/N*Math.PI*2)],
+        restAt:(i,j)=>[-.85+distances[j]*cutLength/armLength,1.65+offset*Math.max(0,1-distances[j]/.35)+radiusAt(j)*Math.cos(i/N*Math.PI*2),radiusAt(j)*Math.sin(i/N*Math.PI*2)],
         uvAt:(i,j)=>[i/N*2*Math.PI*radius,distances[j]],pin:(_i,j)=>j===0});
       b.markTubeSeams(0,N,rows);
       break;

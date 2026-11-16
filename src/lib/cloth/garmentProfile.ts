@@ -37,3 +37,13 @@ export function capeProfile(drop: number) {
     depth: .14 + shoulder * .20 + hanging * .15,
     height: .99 - shoulder * .07 - hanging};
 }
+
+// The cuff slider scales clearance above the arm, keeping the ring outside the collider.
+export function wristRadius(arm:number,mouth:number,fit=.35){
+  const minimum=arm+.011;
+  return minimum+Math.max(0,mouth-minimum)*fit*fit;
+}
+
+export function sleeveRadius(mouth:number,cuff:number,t:number){
+  return mouth+(cuff-mouth)*smooth(t);
+}

@@ -1,8 +1,8 @@
 import { Matrix4, Quaternion, Vector3 } from 'three';
-import { bodyArmPoints, upperTransform, rotateUpper, sleeveRing, type BodySettings } from './mannequin';
+import { BODY_ARM_RADIUS, bodyArmPoints, upperTransform, rotateUpper, sleeveRing, type BodySettings } from './mannequin';
 import type { ClothBuild, LegsSettings, V3 } from './presets';
 import type { ClothSim } from './solver';
-const BODY_CUFF_RADIUS=.102;
+import {wristRadius} from './garmentProfile';
 function armMatrices(root: LegsSettings, from: BodySettings, to: BodySettings) {
     const result: Matrix4[] = [];
     for (const side of ['left', 'right'] as const) {
@@ -91,9 +91,9 @@ export function updateUpperGuides(sim: ClothSim, build: ClothBuild, root: LegsSe
             sectors[k]=g[o];sectors[k+1]=g[o+1];sectors[k+2]=g[o+2];
             sectors[k+3]=normal[0];sectors[k+4]=normal[1];sectors[k+5]=normal[2];sectors[k+6]=.04;
             if(row===m.sleeveDistances.length-1){
-                const radius=BODY_CUFF_RADIUS+(body.sleeveEase??.045)*.84;
+                const radius=wristRadius(BODY_ARM_RADIUS,BODY_ARM_RADIUS+.012+(body.sleeveEase??.045),body.cuff);
                 for(let axis=0;axis<3;axis++)g[o+axis]+=normal[axis]*radius;
-                g[o+3]=.04+(body.sleeveEase??.045)*.4;
+                g[o+3]=.004;
             }
         }
 }
